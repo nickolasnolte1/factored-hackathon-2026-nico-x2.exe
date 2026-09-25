@@ -1,0 +1,25 @@
+# Data & organizer material (never commit — public repo)
+data/
+*.csv
+*.parquet
+*.pdf
+*.pkl
+
+# Secrets
+.env
+*.pem
+.databrickscfg
+secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Tooling / artifacts
+.databricks/
+mlruns/
+.DS_Store
