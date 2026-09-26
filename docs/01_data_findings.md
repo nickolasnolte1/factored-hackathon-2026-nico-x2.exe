@@ -37,3 +37,30 @@ Complaints (n = 2,438) split almost evenly across subcategories: *Cargo no recon
 - Workflow choice is driven by structured operational data (FCR, follow-up, complaint categories, transactions), not transcript text.
 - The learned component should be trained on label-bearing structured data (e.g. transaction `is_fraud`), with a documented baseline and leakage-safe temporal splits.
 - Intent understanding for the conversational layer is evaluated on a labeled, team-generated ES/PT test set, reported separately from organizer data.
+
+## Bronze load reconciliation (full dataset, 2026-09-26)
+
+Source prefix `data/`, all 12 tables except `digital_events` (deferred). Row counts in Bronze were cross-checked file-by-file against an independent pandas read (exact match), so differences below come from the source, not from ingestion.
+
+| Table | Documented rows | Loaded rows | Loaded / documented | Distinct PK | Files |
+|---|---|---|---|---|---|
+| branches | 350 | 350 | 100% | 350 | 1 |
+| customers | 150,000 | 150,000 | 100% | 150,000 | 1 |
+| products | 400,000 | 400,000 | 100% | 400,000 | 1 |
+| service_agents | 1,200 | 1,200 | 100% | 1,200 | 1 |
+| marketing_campaigns | 200 | 200 | 100% | 200 | 1 |
+| daily_exchange_rates | 3,000 | 13,164 | 439% | 13,164 | 1 |
+| transactions | 5,000,000 | 4,425,008 | 88.5% | 4,425,008 | 1,097 |
+| call_center_interactions | 800,000 | 686,296 | 85.8% | 686,296 | 1,097 |
+| call_transcripts | 200,000 | 171,321 | 85.7% | 171,321 | 1,097 |
+| satisfaction_surveys | 250,000 | 212,759 | 85.1% | 212,759 | 1,097 |
+| complaints | 80,000 | 67,095 | 83.9% | 67,095 | 1,097 |
+| campaign_sends | 2,000,000 | 1,746,801 | 87.3% | 1,746,801 | 1,083 |
+
+Observations:
+
+1. **Fact tables hold 84–89% of documented volume.** Documented counts appear to be nominal generation targets; we treat the files as the source of truth and report the gap.
+2. **No primary-key duplicates** in any table. The announced ~2% duplicates must therefore be content-level (same business event, different ID) — to be detected in Silver with natural-key rules.
+3. **Late arrivals are real:** 1,106,307 transactions (25.0%) have a `process_date` different from their `transaction_date`. Silver must key time-based logic on event time, and model freshness on process time.
+4. `daily_exchange_rates` has 13,164 rows vs. 3,000 documented (multiple currency pairs per day).
+5. No `_rescued_data` rows so far: no schema drift detected within `data/`. The `data_backup_20260831/` snapshot will be ingested separately to test schema evolution and late-arrival handling.
