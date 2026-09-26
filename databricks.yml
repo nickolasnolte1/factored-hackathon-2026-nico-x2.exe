@@ -1,0 +1,40 @@
+bundle:
+  name: factored-banking-cs
+
+variables:
+  source_prefix:
+    description: Landing sub-folder to ingest (data | data_backup_20260831)
+    default: data
+
+resources:
+  jobs:
+    ingest_bronze:
+      name: "[${bundle.target}] Ingest · S3 → Landing → Bronze"
+      max_concurrent_runs: 1
+      tasks:
+        - task_key: landing_copy
+          notebook_task:
+            notebook_path: ./src/bronze/01_landing_copy.py
+            base_parameters:
+              tables: all
+              source_prefix: ${var.source_prefix}
+              max_workers: "32"
+          max_retries: 2
+          min_retry_interval_millis: 60000
+
+        - task_key: bronze_autoloader
+          depends_on:
+            - task_key: landing_copy
+          notebook_task:
+            notebook_path: ./src/bronze/02_bronze_autoloader.py
+            base_parameters:
+              tables: all
+              source_prefix: ${var.source_prefix}
+          max_retries: 1
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://dbc-779a8237-d9dd.cloud.databricks.com
