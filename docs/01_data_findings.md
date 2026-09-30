@@ -60,7 +60,7 @@ Source prefix `data/`, all 12 tables except `digital_events` (deferred). Row cou
 Observations:
 
 1. **Fact tables hold 84–89% of documented volume.** Documented counts appear to be nominal generation targets; we treat the files as the source of truth and report the gap.
-2. **No primary-key duplicates** in any table. The announced ~2% duplicates must therefore be content-level (same business event, different ID) — to be detected in Silver with natural-key rules.
-3. **Late arrivals are real:** 1,106,307 transactions (25.0%) have a `process_date` different from their `transaction_date`. Silver must key time-based logic on event time, and model freshness on process time.
+2. **No primary-key duplicates** in any table. The full-data EDA ([02](02_eda_workflow_selection.md), Section 6) also found 0 duplicates on natural keys, so the announced ~2% duplicates are not present in `data/`.
+3. **`process_date` differs from the event date for 1,106,307 transactions (25.0%).** _Corrected in [02](02_eda_workflow_selection.md), Q4.2:_ these are not late arrivals but a business-day cut-off (events between 00:00 and 05:59 carry the previous day; no row carries a later day). Silver keys all time-based logic on event time and uses `process_date` only as a partition key.
 4. `daily_exchange_rates` has 13,164 rows vs. 3,000 documented (multiple currency pairs per day).
 5. No `_rescued_data` rows so far: no schema drift detected within `data/`. The `data_backup_20260831/` snapshot will be ingested separately to test schema evolution and late-arrival handling.
