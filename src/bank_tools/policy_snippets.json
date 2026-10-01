@@ -1,0 +1,163 @@
+{
+  "version": "1.0.0",
+  "note": "Team-written ES/PT text for get_policy_info. Placeholders {policy:<path>} are filled from src/policy/dispute_policy.json at request time, so values never drift from the policy. Filters: |list (localized list joined with y/e), |label (one localized value), |minutes (seconds / 60). Internal paths (handoff thresholds and calibration, priority amounts, matching tolerances, confidence, clarification and retry limits, trigger order, must_not vocabulary) must never appear here; the service refuses to load a file that references them.",
+  "labels": {
+    "es": {
+      "Approved": "aprobados",
+      "Purchase": "compras",
+      "Withdrawal": "retiros",
+      "Transfer": "transferencias",
+      "Payment": "pagos",
+      "Adjustment": "cargos o comisiones del banco",
+      "Claim": "reclamo",
+      "dispute_unrecognized_charge": "cargos que no reconoces",
+      "dispute_incorrect_charge_or_fee": "cobros o comisiones incorrectos",
+      "account_payment_inquiry": "consultas de saldo, movimientos y pagos rechazados",
+      "card_lost_or_block": "tarjetas perdidas, robadas o clonadas (te comunico con un especialista)"
+    },
+    "pt": {
+      "Approved": "aprovadas",
+      "Purchase": "compras",
+      "Withdrawal": "saques",
+      "Transfer": "transferências",
+      "Payment": "pagamentos",
+      "Adjustment": "tarifas ou cobranças do banco",
+      "Claim": "reclamação",
+      "dispute_unrecognized_charge": "cobranças que você não reconhece",
+      "dispute_incorrect_charge_or_fee": "cobranças ou tarifas incorretas",
+      "account_payment_inquiry": "consultas de saldo, movimentações e pagamentos recusados",
+      "card_lost_or_block": "cartões perdidos, roubados ou clonados (transfiro você para um especialista)"
+    }
+  },
+  "topics": {
+    "scope": {
+      "values": ["scope.in_scope_intents", "scope.on_out_of_scope"],
+      "es": [
+        {"id": "scope.in_scope", "text": "Puedo ayudarte con: {policy:scope.in_scope_intents|list}."},
+        {"id": "scope.out_of_scope", "text": "No puedo responder sobre aprobación de créditos, ofertas de préstamos, inversiones ni apertura de cuentas. Para esos temas te ofrezco hablar con un asesor."},
+        {"id": "scope.complaints", "text": "Si tienes otro tipo de queja, la registro y te comunico con un asesor."}
+      ],
+      "pt": [
+        {"id": "scope.in_scope", "text": "Posso ajudar com: {policy:scope.in_scope_intents|list}."},
+        {"id": "scope.out_of_scope", "text": "Não posso responder sobre aprovação de crédito, ofertas de empréstimo, investimentos nem abertura de contas. Para esses assuntos, ofereço transferir você para um atendente."},
+        {"id": "scope.complaints", "text": "Se você tiver outro tipo de reclamação, eu a registro e transfiro você para um atendente."}
+      ]
+    },
+    "authentication": {
+      "values": ["authentication.second_factor.digits", "authentication.second_factor.ttl_seconds", "authentication.session_ttl_minutes"],
+      "es": [
+        {"id": "authentication.factors", "text": "Para proteger tu cuenta verifico tu identidad con tu tipo y número de documento y un código de un solo uso de {policy:authentication.second_factor.digits} dígitos que te enviamos. El código vence a los {policy:authentication.second_factor.ttl_seconds|minutes} minutos."},
+        {"id": "authentication.never_alone", "text": "Tu número de cliente, correo, teléfono o nombre no bastan para verificar tu identidad."},
+        {"id": "authentication.session", "text": "Después de verificarte, la sesión segura dura {policy:authentication.session_ttl_minutes} minutos."}
+      ],
+      "pt": [
+        {"id": "authentication.factors", "text": "Para proteger sua conta, verifico sua identidade com o tipo e o número do seu documento e um código de uso único de {policy:authentication.second_factor.digits} dígitos que enviamos para você. O código expira em {policy:authentication.second_factor.ttl_seconds|minutes} minutos."},
+        {"id": "authentication.never_alone", "text": "Seu número de cliente, e-mail, telefone ou nome não bastam para verificar sua identidade."},
+        {"id": "authentication.session", "text": "Depois da verificação, a sessão segura dura {policy:authentication.session_ttl_minutes} minutos."}
+      ]
+    },
+    "session_expiry": {
+      "values": ["authentication.session_ttl_minutes", "authentication.session_ttl_mode"],
+      "es": [
+        {"id": "session_expiry.ttl", "text": "La sesión segura dura {policy:authentication.session_ttl_minutes} minutos desde que verificas tu identidad y no se extiende."},
+        {"id": "session_expiry.expired", "text": "Si la sesión vence, debes verificarte de nuevo. Con una sesión vencida no realizo ninguna acción, tampoco registrar un caso."}
+      ],
+      "pt": [
+        {"id": "session_expiry.ttl", "text": "A sessão segura dura {policy:authentication.session_ttl_minutes} minutos a partir da verificação da sua identidade e não é prorrogada."},
+        {"id": "session_expiry.expired", "text": "Se a sessão expirar, você precisa se verificar novamente. Com uma sessão expirada não realizo nenhuma ação, nem registro um caso."}
+      ]
+    },
+    "dispute_window": {
+      "values": ["dispute_window.days_since_transaction"],
+      "es": [
+        {"id": "dispute_window.days", "text": "Puedes disputar un movimiento hasta {policy:dispute_window.days_since_transaction} días después de la fecha en que se realizó."},
+        {"id": "dispute_window.outside", "text": "Si pasó más tiempo, te comunico con un especialista para que revise tu caso."}
+      ],
+      "pt": [
+        {"id": "dispute_window.days", "text": "Você pode contestar uma movimentação até {policy:dispute_window.days_since_transaction} dias depois da data em que ela foi feita."},
+        {"id": "dispute_window.outside", "text": "Se tiver passado mais tempo, transfiro você para um especialista analisar o seu caso."}
+      ]
+    },
+    "dispute_eligibility": {
+      "values": ["eligibility.transaction_statuses", "eligibility.transaction_types"],
+      "es": [
+        {"id": "dispute_eligibility.status", "text": "Solo se pueden disputar movimientos {policy:eligibility.transaction_statuses|list}."},
+        {"id": "dispute_eligibility.unrecognized", "text": "Si no reconoces un movimiento, puedes disputar {policy:eligibility.transaction_types.dispute_unrecognized_charge|list}."},
+        {"id": "dispute_eligibility.incorrect", "text": "Si un cobro es tuyo pero es incorrecto, puedes disputar {policy:eligibility.transaction_types.dispute_incorrect_charge_or_fee|list}."},
+        {"id": "dispute_eligibility.not_disputable", "text": "Los depósitos y los movimientos pendientes, rechazados o reversados no se disputan. Si una operación fue rechazada, te explico el motivo."}
+      ],
+      "pt": [
+        {"id": "dispute_eligibility.status", "text": "Só é possível contestar movimentações {policy:eligibility.transaction_statuses|list}."},
+        {"id": "dispute_eligibility.unrecognized", "text": "Se você não reconhece uma movimentação, pode contestar {policy:eligibility.transaction_types.dispute_unrecognized_charge|list}."},
+        {"id": "dispute_eligibility.incorrect", "text": "Se a cobrança é sua, mas está incorreta, você pode contestar {policy:eligibility.transaction_types.dispute_incorrect_charge_or_fee|list}."},
+        {"id": "dispute_eligibility.not_disputable", "text": "Depósitos e movimentações pendentes, recusadas ou estornadas não podem ser contestados. Se uma operação foi recusada, explico o motivo."}
+      ]
+    },
+    "dispute_process": {
+      "values": ["case.case_type", "priority.first_response_hours"],
+      "es": [
+        {"id": "dispute_process.steps", "text": "Primero identificamos juntos el movimiento en tu cuenta. Luego te muestro los datos registrados por el banco (monto, fecha y comercio) y confirmas que es ese. Con tu confirmación registro un {policy:case.case_type|label} y te doy el número de caso."},
+        {"id": "dispute_process.times", "text": "Un especialista te contactará dentro de {policy:priority.first_response_hours.high}, {policy:priority.first_response_hours.medium} o {policy:priority.first_response_hours.low} horas, según la prioridad de tu caso."},
+        {"id": "dispute_process.outcome", "text": "La investigación decide el resultado; no puedo prometer un reembolso."}
+      ],
+      "pt": [
+        {"id": "dispute_process.steps", "text": "Primeiro identificamos juntos a movimentação na sua conta. Depois mostro os dados registrados pelo banco (valor, data e estabelecimento) e você confirma que é essa. Com a sua confirmação, registro uma {policy:case.case_type|label} e informo o número do caso."},
+        {"id": "dispute_process.times", "text": "Um especialista entrará em contato em até {policy:priority.first_response_hours.high}, {policy:priority.first_response_hours.medium} ou {policy:priority.first_response_hours.low} horas, conforme a prioridade do seu caso."},
+        {"id": "dispute_process.outcome", "text": "A investigação decide o resultado; não posso prometer um reembolso."}
+      ]
+    },
+    "response_times": {
+      "values": ["case.case_type", "priority.first_response_hours"],
+      "es": [
+        {"id": "response_times.first_response", "text": "El primer contacto de un especialista llega dentro de {policy:priority.first_response_hours.high} horas para prioridad alta, {policy:priority.first_response_hours.medium} horas para prioridad media y {policy:priority.first_response_hours.low} horas para prioridad baja."},
+        {"id": "response_times.priority", "text": "El banco asigna la prioridad según el tipo de caso; te la indico al registrar el {policy:case.case_type|label}."}
+      ],
+      "pt": [
+        {"id": "response_times.first_response", "text": "O primeiro contato de um especialista acontece em até {policy:priority.first_response_hours.high} horas para prioridade alta, {policy:priority.first_response_hours.medium} horas para prioridade média e {policy:priority.first_response_hours.low} horas para prioridade baixa."},
+        {"id": "response_times.priority", "text": "O banco define a prioridade conforme o tipo de caso; eu informo ao registrar a {policy:case.case_type|label}."}
+      ]
+    },
+    "refunds": {
+      "values": [],
+      "es": [
+        {"id": "refunds.no_promise", "text": "Registrar una disputa no garantiza un reembolso. El equipo de investigación revisa el caso y decide, y te informa el resultado por los canales oficiales."}
+      ],
+      "pt": [
+        {"id": "refunds.no_promise", "text": "Registrar uma contestação não garante um reembolso. A equipe de investigação analisa o caso, decide e informa o resultado pelos canais oficiais."}
+      ]
+    },
+    "declines": {
+      "values": [],
+      "es": [
+        {"id": "declines.code_table", "text": "Cuando una operación es rechazada, te explico el motivo según el código de respuesta que registró el banco."},
+        {"id": "declines.insufficient_data", "text": "Si el código no está disponible o no aplica a tu producto, no puedo explicar la causa y te ofrezco hablar con un asesor."}
+      ],
+      "pt": [
+        {"id": "declines.code_table", "text": "Quando uma operação é recusada, explico o motivo de acordo com o código de resposta registrado pelo banco."},
+        {"id": "declines.insufficient_data", "text": "Se o código não estiver disponível ou não se aplicar ao seu produto, não consigo explicar a causa e ofereço transferir você para um atendente."}
+      ]
+    },
+    "human_agent": {
+      "values": [],
+      "es": [
+        {"id": "human_agent.anytime", "text": "Puedes pedir hablar con un asesor en cualquier momento."},
+        {"id": "human_agent.package", "text": "Le paso un resumen de tu solicitud y los datos verificados, para que no tengas que repetir todo."}
+      ],
+      "pt": [
+        {"id": "human_agent.anytime", "text": "Você pode pedir para falar com um atendente a qualquer momento."},
+        {"id": "human_agent.package", "text": "Envio a ele um resumo da sua solicitação e os dados verificados, para que você não precise repetir tudo."}
+      ]
+    },
+    "privacy": {
+      "values": [],
+      "es": [
+        {"id": "privacy.own_data", "text": "Solo uso la información de tus propios productos y movimientos, y solo después de verificar tu identidad. Nunca comparto datos de otros clientes."},
+        {"id": "privacy.never_ask", "text": "Nunca te pediré contraseñas, el número completo de tu tarjeta ni su código de seguridad."}
+      ],
+      "pt": [
+        {"id": "privacy.own_data", "text": "Uso apenas as informações dos seus próprios produtos e movimentações, e só depois de verificar sua identidade. Nunca compartilho dados de outros clientes."},
+        {"id": "privacy.never_ask", "text": "Nunca vou pedir senhas, o número completo do seu cartão nem o código de segurança."}
+      ]
+    }
+  }
+}
