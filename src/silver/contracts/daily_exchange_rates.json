@@ -1,0 +1,51 @@
+{
+  "table": "daily_exchange_rates",
+  "source": "daily_exchange_rates",
+  "kind": "dimension",
+  "description": "Daily FX reference rates between USD, MXN, COP and ARS, one row per date and ordered currency pair (rate = target units per source unit). For customer-facing conversions only, labeled as such; transactions.amount_usd uses the source's fixed rates instead (issue 12). Typed and checked from workspace.bronze.daily_exchange_rates.",
+  "primary_key": ["date", "source_currency", "target_currency"],
+  "natural_key": ["date", "source_currency", "target_currency"],
+  "event_time": "date",
+  "load": {
+    "cadence": "snapshot",
+    "notes": "Single CSV re-delivered in full (13,164 rows vs 3,000 documented: 12 ordered pairs per day, not 3).",
+    "partition_by": [],
+    "cluster_by": [],
+    "max_quarantine_rate": 0.05
+  },
+  "depends_on": [],
+  "columns": {
+    "date": {"type": "date", "nullable": false, "source": "date", "min": "2023-01-01", "rule_ref": 22,
+      "description": "Rate date (2023-06-17 to 2026-06-17, every calendar day). Primary key with the currency pair."},
+    "source_currency": {"type": "string", "nullable": false, "source": "source_currency", "allowed": ["USD", "MXN", "COP", "ARS"], "rule_ref": 22,
+      "description": "Currency converted from (ISO, upper-case)."},
+    "target_currency": {"type": "string", "nullable": false, "source": "target_currency", "allowed": ["USD", "MXN", "COP", "ARS"], "rule_ref": 22,
+      "description": "Currency converted to (ISO, upper-case)."},
+    "exchange_rate": {"type": "decimal(18,6)", "nullable": false, "source": "exchange_rate", "rule_ref": 22,
+      "description": "Mid rate: target_currency units per 1 source_currency. Flat within about +/-2% of a constant over three years (synthetic; no ARS devaluation). The two directions of a pair are drawn independently (their product ranges 0.96-1.04)."},
+    "buy_rate": {"type": "decimal(18,6)", "nullable": false, "source": "buy_rate",
+      "description": "Bank buy rate (at or below the mid rate)."},
+    "sell_rate": {"type": "decimal(18,6)", "nullable": false, "source": "sell_rate",
+      "description": "Bank sell rate (at or above the mid rate)."},
+    "source": {"type": "string", "nullable": false, "source": "source", "allowed": ["Central Bank", "Reuters", "Bloomberg", "Internal"],
+      "description": "Rate provider; varies from day to day within a pair, so it cannot be used to pick a series."}
+  },
+  "foreign_keys": [],
+  "checks": [
+    {"name": "exchange_rate_positive", "severity": "hard", "rule_ref": 22,
+     "expr": "exchange_rate > 0",
+     "description": "Typed mid rate is present and positive; a missing or non-positive rate cannot convert anything."},
+    {"name": "buy_sell_positive", "severity": "warn", "rule_ref": 22,
+     "expr": "buy_rate > 0 AND sell_rate > 0",
+     "description": "Typed buy and sell rates are present and positive."},
+    {"name": "buy_mid_sell_ordered", "severity": "warn",
+     "expr": "buy_rate <= exchange_rate AND exchange_rate <= sell_rate",
+     "description": "buy_rate <= exchange_rate <= sell_rate."},
+    {"name": "currencies_differ", "severity": "warn",
+     "expr": "source_currency <> target_currency",
+     "description": "A pair converts between two different currencies."},
+    {"name": "date_not_in_future", "severity": "warn",
+     "expr": "`date` <= current_date()",
+     "description": "No rate is published for a future date."}
+  ]
+}

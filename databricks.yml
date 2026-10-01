@@ -32,6 +32,33 @@ resources:
               source_prefix: ${var.source_prefix}
           max_retries: 1
 
+    build_silver:
+      name: "[${bundle.target}] Silver · Bronze → typed, checked, merged"
+      max_concurrent_runs: 1
+      parameters:
+        - name: tables
+          default: all            # comma list or all (dependency order)
+        - name: mode
+          default: incremental    # incremental | full
+      tasks:
+        - task_key: silver_build
+          notebook_task:
+            notebook_path: ./src/silver/01_build_silver.py
+            base_parameters:
+              tables: "{{job.parameters.tables}}"
+              mode: "{{job.parameters.mode}}"
+              run_id: "{{job.run_id}}"
+          max_retries: 1
+
+        - task_key: update_fixture_test
+          depends_on:
+            - task_key: silver_build
+          run_if: ALL_DONE
+          notebook_task:
+            notebook_path: ./src/silver/02_update_fixture_test.py
+            base_parameters:
+              cleanup: "false"
+
 targets:
   dev:
     mode: development
