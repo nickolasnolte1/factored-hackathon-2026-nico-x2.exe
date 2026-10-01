@@ -62,3 +62,4 @@ Data lands in Unity Catalog under `workspace.{bronze,silver,gold,ops}`.
 ## Team
 
 - Nickolas Nolte
+- Nicolás Contreras
