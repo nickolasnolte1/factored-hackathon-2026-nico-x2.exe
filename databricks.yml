@@ -59,6 +59,21 @@ resources:
             base_parameters:
               cleanup: "false"
 
+    build_gold:
+      name: "[${bundle.target}] Gold · Silver → agent-ready, privacy-minimized"
+      max_concurrent_runs: 1
+      parameters:
+        - name: tables
+          default: all            # comma list or all (build order in src/gold/gold_tables.json)
+      tasks:
+        - task_key: gold_build
+          notebook_task:
+            notebook_path: ./src/gold/01_build_gold.py
+            base_parameters:
+              tables: "{{job.parameters.tables}}"
+              run_id: "{{job.run_id}}"
+          max_retries: 1
+
 targets:
   dev:
     mode: development
