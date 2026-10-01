@@ -13,7 +13,7 @@ _Built on 2026-09-30 with seed 20261005 from the Silver anchors in `data/scenari
 - **Audit:**
   - intent labels: 118 of 120 sampled rows (98.3%) match the reviewer's label exactly, and 120 of 120 score the same under ambiguity-aware scoring;
   - holdout labels: 40 of 40 sampled rows match;
-  - end-to-end outcomes: 30 of 30 random scenarios recompute to the same result by hand, and 280 of 280 in code.
+  - end-to-end outcomes: 30 of 30 random scenarios re-derived step by step by an independent reviewer (outside the generator code), and 280 of 280 in code.
 - **Fixes from the audit:**
   - 14 holdout collisions removed;
   - 8 families relabeled to the team convention;
@@ -267,7 +267,7 @@ An independent review pass audited the generator before this report. The reviewe
 **End-to-end outcomes.**
 
 - **Programmatic.** `expected_outcome` was recomputed from every stored script: 280 of 280 match on outcome, handoff reason and transaction.
-- **By hand.** 30 random scenarios (15 ES, 15 PT, 11 categories), each checked by hand against the policy. For every one, the reviewer:
+- **Independent step-by-step review.** 30 random scenarios (15 ES, 15 PT, 11 categories), each re-derived against the policy outside the generator code. For every one, the reviewer:
   - checked the session and customer status;
   - listed the customer's movements within the tolerances;
   - applied the triggers in order;
