@@ -15,6 +15,7 @@ An AI-first customer service system for a LATAM retail bank (MX / CO / AR), buil
 | `src/gold/` | Gold: agent-ready, privacy-minimized tables read by the bank tools, with policy-rendered flags and privacy checks (`01_build_gold.py`, `gold_lib.py`, `sql/`, `gold_tables.json`) |
 | `src/bank_tools/` | Mock banking tool service for the agent: 14 tools with sessions, ownership checks, policy enforcement, confirmation before writes, handoff packages and an audit trail, over a local Gold snapshot or Databricks ([contract](src/bank_tools/CONTRACT.md), [README](src/bank_tools/README.md)) |
 | `tests/bank_tools/` | Acceptance tests of the bank tools, written from the contract and run through a contract-based harness, over a small synthetic fixture (live Databricks tests are opt-in), plus the security review's red-team tests (`test_security_redteam.py`) |
+| `app/` | Demo app: customer chat with secure sign-in, candidate and confirmation cards, per-turn trace, and the human agent console, over the bank tools with a Databricks-served LLM ([README](app/README.md)) |
 | `src/policy/` | Synthetic dispute-intake policy (`dispute_policy.json`, prepared for the project by an automated authoring process, not a real bank policy) and its deterministic reference implementation |
 | `src/scenarios/` | ES/PT scenario generator: Silver anchors, intent dataset and end-to-end agent scenarios ([README](src/scenarios/README.md)) |
 | `docs/` | Data findings, EDA and workflow selection, test scenarios, Silver, Gold and bank tools (architecture and evaluation reports to come) |

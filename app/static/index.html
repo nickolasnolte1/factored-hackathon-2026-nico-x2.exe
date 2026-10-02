@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Expediente</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,600;112,800&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">E</span>
+    <div>
+      <div class="brand-name">Expediente</div>
+      <div class="brand-sub">LATAM Bank · prototipo con datos sintéticos</div>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Vistas">
+    <button role="tab" id="tab-customer" aria-selected="true" aria-controls="view-customer">Cliente</button>
+    <button role="tab" id="tab-console" aria-selected="false" aria-controls="view-console">Consola del agente <span class="count" id="console-count" hidden></span></button>
+  </nav>
+  <div class="status">
+    <span class="pill mono" title="Reloj del servicio: los datos llegan hasta el 18 jun 2026"><span class="dot"></span><span id="clock-now">—</span></span>
+    <span class="pill mono" id="model-name" title="Modelo de lenguaje">—</span>
+  </div>
+</header>
+
+<main id="view-customer" class="customer-view" role="tabpanel" aria-labelledby="tab-customer">
+  <aside class="demo-panel" aria-label="Controles de la demo">
+    <section class="panel-block">
+      <h2 class="eyebrow">Clientes de prueba</h2>
+      <p class="hint">Datos sintéticos del concurso. Elige uno para identificarte en el formulario seguro.</p>
+      <div id="personas" class="personas"></div>
+    </section>
+    <section class="panel-block">
+      <h2 class="eyebrow">Teléfono del cliente <span class="tag">simulado</span></h2>
+      <div class="phone" id="phone">
+        <div class="phone-empty">Aquí llega el código por SMS cuando el cliente lo pide.</div>
+      </div>
+    </section>
+    <section class="panel-block">
+      <h2 class="eyebrow">Controles</h2>
+      <div class="controls">
+        <button class="btn ghost" id="btn-new">Nueva conversación</button>
+        <button class="btn ghost" id="btn-clock" title="Adelanta el reloj del servicio 16 minutos: la sesión de 15 minutos vence">Adelantar 16 min</button>
+      </div>
+    </section>
+  </aside>
+
+  <section class="chat" aria-label="Chat del cliente">
+    <div class="chat-head">
+      <div class="avatar" aria-hidden="true">LB</div>
+      <div class="chat-title">
+        <div class="name">Asistente de LATAM Bank</div>
+        <div class="sub" id="session-state"><span class="lock"></span>Sin identificar</div>
+      </div>
+    </div>
+    <div class="messages" id="messages" aria-live="polite"></div>
+    <div class="starters" id="starters">
+      <button class="chip">Me aparece un cobro que no reconozco</button>
+      <button class="chip">Me cobraron una comisión que no corresponde</button>
+      <button class="chip">Perdí mi tarjeta</button>
+      <button class="chip">Tem uma compra no meu cartão que eu não fiz</button>
+    </div>
+    <form class="composer" id="composer">
+      <label for="input" class="sr-only">Mensaje</label>
+      <textarea id="input" rows="1" placeholder="Escribe tu mensaje…" autocomplete="off"></textarea>
+      <button class="btn primary" id="send" type="submit">Enviar</button>
+    </form>
+  </section>
+
+  <aside class="trace-panel" aria-label="Por dentro">
+    <div class="trace-head">
+      <h2 class="eyebrow">Por dentro</h2>
+      <p class="hint">Cada herramienta que usó el asistente, con su resultado, su evidencia y su costo. El modelo nunca ve el documento, el código ni el número de cliente.</p>
+    </div>
+    <div id="trace" class="trace"><div class="trace-empty">Todavía no hay turnos.</div></div>
+  </aside>
+</main>
+
+<main id="view-console" class="console-view" role="tabpanel" aria-labelledby="tab-console" hidden>
+  <section class="console-list">
+    <div class="console-head">
+      <h2>Transferencias a humano</h2>
+      <button class="btn ghost" id="btn-refresh">Actualizar</button>
+    </div>
+    <div id="tickets" class="tickets"></div>
+    <h2 class="cases-title">Reclamos creados en el chat</h2>
+    <div id="cases" class="cases"></div>
+  </section>
+  <section class="console-detail" id="ticket-detail">
+    <div class="detail-empty">Elige una transferencia para ver su expediente.</div>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
