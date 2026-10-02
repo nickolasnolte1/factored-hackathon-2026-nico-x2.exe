@@ -290,7 +290,7 @@ These results are kept as documented negative controls.
 ## 11. Limitations
 
 - **Synthetic-data artifacts.** Uniform categories, scores and timings; FCR driven only by reason; satisfaction set by resolution; random cross-table links; flat demand. Conclusions about what "drives" outcomes describe the generator, not banking behavior. The data is used here for sizing, baselines and grounding, not for causal claims.
-- **Spanish only.** All historical text is Spanish (`detected_language = 'es'` in 171,321 of 171,321 transcripts†), and accents cover only Mexico, Colombia and Argentina. Portuguese evaluation data is team-generated, labeled as such, and reported separately.
+- **Spanish only.** All historical text is Spanish (`detected_language = 'es'` in 171,321 of 171,321 transcripts†), and accents cover only Mexico, Colombia and Argentina. Portuguese evaluation data is generated for the project by automated processes (the organizers' "team-generated" category, not written by a person), labeled as such, and reported separately.
 - **Bronze-level numbers.** Figures are raw and pre-dedup; with 0 duplicates found, Silver should reproduce them except for the fields Section 6 recomputes.
 - **Sample and cost caveats.** Interactions appear to be a sample (Section 2, observation 11), so savings are rates, not FTE. Handle time exists only for voice and video (590,062 of 686,296 contacts).
 - **Assumptions.** The Queja-to-dispute mapping is an assumption: contacts cannot be linked to cases. Historical baselines and scenario-based targets measure different populations, so comparisons are directional.

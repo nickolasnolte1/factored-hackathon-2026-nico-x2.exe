@@ -25,7 +25,7 @@ INTENTS = {"dispute_unrecognized_charge", "dispute_incorrect_charge_or_fee", "ac
 
 
 def validate_families():
-    """Structural checks the generator relies on (the full style check lives with the family authors)."""
+    """Structural checks the generator relies on (wording, style and language quality are not checked by code)."""
     errors, seen = [], set()
     for lang in ("es", "pt"):
         doc = json.load(open(os.path.join(generate.FAMILY_DIR, f"{lang}.json"), encoding="utf-8"))

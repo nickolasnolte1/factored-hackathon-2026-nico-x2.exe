@@ -208,7 +208,7 @@ _The mock banking service the agent calls: [`src/bank_tools/`](../src/bank_tools
 ```mermaid
 flowchart LR
     customer(["Customer"]) --> runtime
-    subgraph runtime ["Chat runtime (holds token, conversation_id, turn, trace_id)"]
+    subgraph runtime ["Chat runtime, not built yet (will hold token, conversation_id, turn, trace_id)"]
         direction TB
         form["Secure form: document + one-time code"]
         model["Model loop: tool name + arguments"]

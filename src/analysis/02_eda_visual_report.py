@@ -3,7 +3,7 @@
 # MAGIC # Where customer service fails, and what we build
 # MAGIC **Factored AI & Data Hackathon 2026 · Exploratory data analysis and workflow selection**
 # MAGIC
-# MAGIC This notebook tells the data story behind our choice of workflow. Every data chart in sections 1–4 and the baseline tiles in 5.4
+# MAGIC This notebook tells the data story behind our choice of workflow. Every data chart in sections 1–4, the 5.3 chart and the baseline tiles in 5.4
 # MAGIC are computed live from the Bronze layer (`workspace.bronze`, raw and pre-dedup, full history Jun 2023 – Jun 2026). The scorecard
 # MAGIC (5.1–5.2), the issue table (4.5), the targets (5.5) and the plan (5.6–5.9) are fixed content taken from the written report. The written report is
 # MAGIC `docs/02_eda_workflow_selection.md`; the full audit query set is `src/analysis/01_eda_workflow_selection.py`.
