@@ -184,19 +184,14 @@ The rubric's "incorrect or missing data" has no category of its own. It is cover
 
 ## 7. Synthetic dispute policy
 
-`src/policy/dispute_policy.json` is a synthetic policy prepared for the prototype (generated for the project, not hand-written by a team member). It is not the policy of any real bank. `dispute_policy.py` implements it deterministically, and 16 unit tests cover it. The generator uses the same code to compute every expected outcome.
-
-**Where the reference flow departs from the written policy.** `expected_outcome` currently differs from the rules below in three paths. None of the 280 stored scenarios takes them, so the dataset outcomes are unaffected, but an agent that reuses these functions would inherit them:
-
-- every `card_lost_or_block` request, including a plain "block my card" with no unrecognized movement, returns `handoff` with reason `suspected_card_compromise` (the prototype has no card-block tool);
-- a message with an `other_customer_data` or `social_engineering` attack returns `refuse` even when it also carries a real dispute, so that dispute is not served;
-- a Closed or Suspended customer who asks for a person in the first turn gets `explicit_human_request`, not `customer_status_restricted`, because the explicit request is checked first. `requires_handoff()` alone follows the documented order.
+`src/policy/dispute_policy.json` is a synthetic policy prepared for the prototype (generated for the project, not hand-written by a team member). It is not the policy of any real bank. `dispute_policy.py` implements it deterministically, and 24 unit tests cover it. The generator uses the same code to compute every expected outcome.
 
 - **Authentication.** Document type and number plus a 6-digit OTP. A customer number, e-mail or phone never authenticates. Sessions last 15 minutes from authentication.
-- **Scope.** Disputes, inquiries and card blocks are served:
+- **Scope.** Disputes and inquiries are served:
+  - card requests (lost, stolen, swallowed or cloned card, block or freeze): always handed to a person, because no tool can block a card. The reason is `suspected_card_compromise` when the customer also reports movements they did not make, and `card_block_request` otherwise. The agent never says the card was blocked;
   - out-of-scope requests: `abstain` and offer a human;
   - complaints: routed to a human;
-  - attacks: `refuse`, while any real request in the same message is still served.
+  - attacks: `refuse` when the conversation holds only the attack. When the same message or an earlier one carries a real request, the attack is refused (no other customer's data, no injected instruction followed) and the real request gets its normal outcome, for example `create_case` for a dispute.
 - **Eligibility.** Approved movements owned by the authenticated customer:
   - unrecognized: Purchase, Withdrawal, Transfer or Payment;
   - incorrect: the same types plus Adjustment.
@@ -207,14 +202,16 @@ The rubric's "incorrect or missing data" has no category of its own. It is cover
   - merchant similarity of at least 0.8.
   - The customer confirms the match. A single clarifying question is allowed before handing off.
 - **Handoff triggers, in order:**
-  1. Closed or Suspended customer;
-  2. suspected card compromise;
-  3. explicit request for a person;
-  4. tool failure after 2 retries;
-  5. low intent confidence (below 0.55) after clarifying;
-  6. no match after clarifying;
-  7. outside the dispute window;
-  8. amount above **7,000 USD**.
+  1. Closed or Suspended customer, also when the customer asks for a person or files a complaint;
+  2. suspected card compromise (a lost, stolen or cloned card with movements the customer did not make);
+  3. any other card request (no tool can block a card);
+  4. explicit request for a person;
+  5. tool failure after 2 retries;
+  6. low intent confidence (below 0.55) after clarifying;
+  7. no match after clarifying;
+  8. outside the dispute window;
+  9. amount above **7,000 USD**.
+  - A handoff that comes after a clarifying question is `clarify_then_handoff`, except a tool-failure handoff, which stays `handoff`.
 - **Threshold calibration.** 7,000 USD sits at about p90.3 of the 2,566,191 dispute-eligible Silver movements: p90 is 6,917.66 USD, and 9.73% are above 7,000.
 - **Priority:**
   - high: card compromise, or an unrecognized charge of 2,500 USD or more or an international one;

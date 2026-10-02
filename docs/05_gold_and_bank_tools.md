@@ -198,7 +198,7 @@ _The mock banking service the agent calls: [`src/bank_tools/`](../src/bank_tools
   - a read-back of the stored case before `verified: true`.
 - **Safe fallback.** The service blocks the write when the policy requires a human, or when a tool still fails after bounded retries. The agent then hands off with a structured package, never a transcript.
 - **Results.**
-  - 306 of 306 tests pass, 3 of them live on Databricks: the 265 acceptance tests and 41 security tests.
+  - 308 tests: the 267 acceptance tests and 41 security tests. The 305 offline tests pass. The 3 live Databricks tests were last run before the `card_block_request` reason was added, when 306 of 306 passed.
   - A red-team review (section 24) found 12 issues, 1 high, 5 medium and 6 low. All are fixed and covered by tests.
   - The model-free scenario replay passes 280 of 280 e2e scenarios, with 6,423 tool-level checks.
   - A second export of the local snapshot from Gold gives identical checksums.
@@ -287,7 +287,7 @@ flowchart LR
 - **Needs confirmation:** creating a dispute case, the only customer-facing write. The handoff ticket is the safe fallback and needs none.
 - **Abstain or transfer:**
   - **Out of scope** (credit, investments, loans): the agent gives the scope text from `get_policy_info` and offers a human.
-  - **Human required by policy:** restricted customer, card compromise, explicit request, tool failure, no match after one clarification, movement outside the 90-day window, amount above the threshold. The service signals each one (`service_restriction`, `next_action = handoff`, `POLICY_BLOCKED`), and the agent calls `handoff_to_human`.
+  - **Human required by policy:** restricted customer, card compromise, any other card request (no tool can block a card), explicit request, tool failure, no match after one clarification, movement outside the 90-day window, amount above the threshold. The service signals the ones it can check (`service_restriction`, `next_action = handoff`, `POLICY_BLOCKED`); card requests and an explicit request come from the customer's words. In every case the agent calls `handoff_to_human`.
 
 ### 13. Access control and data minimization
 
@@ -447,7 +447,7 @@ Every error is `{code, message, retryable, details}`:
 
 ### 20. Test results
 
-The 265 acceptance tests in [`tests/bank_tools/`](../tests/bank_tools/) (every file except `test_security_redteam.py`) were written from the contract, the schemas, the policy and `gold_tables.json`, and reach the service only through a harness built on the contract's interface. Their header notes say the implementation was not read; the repository cannot show this, since the service and the tests were committed together. The 41 security tests (section 24) were written against the implementation. The acceptance tests run over a small synthetic fixture whose expected values are computed with `dispute_policy.py`:
+The 267 acceptance tests in [`tests/bank_tools/`](../tests/bank_tools/) (every file except `test_security_redteam.py`) were written from the contract, the schemas, the policy and `gold_tables.json`, and reach the service only through a harness built on the contract's interface. Their header notes say the implementation was not read; the repository cannot show this, since the service and the tests were committed together. The two `card_block_request` cases of `test_handoff.py` (its routing and its reason check) came later, with that policy change, after the implementation existed. The 41 security tests (section 24) were written against the implementation. The acceptance tests run over a small synthetic fixture whose expected values are computed with `dispute_policy.py`:
 
 - 4 customers: active, "other customer", Closed and Suspended;
 - 8 products and 28 movements, covering every edge case of the policy and the contract.
@@ -460,11 +460,11 @@ The 265 acceptance tests in [`tests/bank_tools/`](../tests/bank_tools/) (every f
 | `test_databricks.py` | 5 (3 live) | Named parameters only; live decoy, Gold reads, local vs Gold parity |
 | `test_dispute_flow.py` | 33 | Prepare, later-turn confirmation, idempotency, policy blocks, read-back |
 | `test_errors_faults_audit.py` | 34 | Error catalog, bounded retries, fault types, rate limits, one audit record per call |
-| `test_handoff.py` | 48 | Package limits, scrubbing, evidence, draft, reason checks, routing, dedupe, fallback |
+| `test_handoff.py` | 50 | Package limits, scrubbing, evidence, draft, reason checks, routing, dedupe, fallback |
 | `test_minimization.py` | 11 | Allow-list, no personal or internal values, untrusted text |
 | `test_reads.py` | 68 | Overview, products, balances, movements, matching, counter, declines, eligibility, policy text |
 | `test_security_redteam.py` | 41 | The 12 findings of the security review (section 24) and the attacks the service resisted |
-| **Total** | **306** | 303 offline (about 3 s); with `BANK_TOOLS_TEST_DATABRICKS=1`, 306 of 306 pass (about 40 s) |
+| **Total** | **308** | 305 offline, all pass (about 3 s). The 3 live tests (`BANK_TOOLS_TEST_DATABRICKS=1`, about 40 s) were last run before `card_block_request` was added, when 306 of 306 passed |
 
 **Decisions recorded during verification** (the contract decides which side is wrong):
 

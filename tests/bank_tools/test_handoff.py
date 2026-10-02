@@ -11,8 +11,8 @@ from tests.bank_tools.harness import expect_error, expect_ok
 
 UNREC = dp.DISPUTE_INTENTS[0]
 POL = hz.POLICY
-QUEUES = {"suspected_card_compromise": "card_security", "customer_status_restricted": "account_restrictions",
-          "complaint_routing": "complaints"}
+QUEUES = {"suspected_card_compromise": "card_security", "card_block_request": "card_security",
+          "customer_status_restricted": "account_restrictions", "complaint_routing": "complaints"}
 PII = {
     "email": "ana.fixture@example.com",
     "customer": fx.C1,
@@ -177,6 +177,7 @@ def test_confirmed_above_threshold_draft_reaches_the_human_pending_review(bank):
     ("no_match_after_clarification", "two_failed_searches", "consistent"),
     ("tool_failure", None, "inconsistent"),
     ("explicit_human_request", None, "not_verifiable"),
+    ("card_block_request", None, "not_verifiable"),
     ("complaint_routing", None, "not_verifiable"),
     ("low_intent_confidence", None, "not_verifiable"),
 ])

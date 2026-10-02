@@ -183,7 +183,9 @@ There are 280 scenarios: 140 ES and 140 PT, split 140 dev and 140 test. Each lan
 - **Authentication.** Document type and number plus an OTP. A customer number never authenticates. Sessions last 15 minutes.
 - **Dispute window.** 90 days.
 - **Matching.** Amount within ±1%, date within ±2 days, and the customer must confirm.
-- **Handoff triggers.** Evaluated in a fixed order, each with a reason code. The reference flow `expected_outcome` departs from the written policy in three paths that no stored scenario takes (every card-block request is handed off, an attack for another customer's data or by social engineering is refused even with a real dispute in the same message, and an explicit request for a person is checked before a restricted customer status); see report 03, section 7.
+- **Handoff triggers.** Evaluated in a fixed order, each with a reason code. A Closed or Suspended customer comes first, also when the customer asks for a person.
+- **Card requests.** Always handed to a person, because no tool can block a card: `suspected_card_compromise` when the customer also reports movements they did not make, `card_block_request` otherwise.
+- **Attacks.** Refused. A real request in the same message or an earlier one is still served and keeps its normal outcome; the attack only adds to `must_not`.
 - **Priority.** Rule-based.
 - **Decline codes.** Explained from a code table. A card-only code on an account movement takes the insufficient-data path.
 

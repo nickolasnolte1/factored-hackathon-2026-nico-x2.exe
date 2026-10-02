@@ -1407,6 +1407,7 @@
                   "enum": [
                     "customer_status_restricted",
                     "suspected_card_compromise",
+                    "card_block_request",
                     "explicit_human_request",
                     "tool_failure",
                     "low_intent_confidence",
@@ -1790,7 +1791,7 @@
         "get_ticket",
         "get_transactions"
       ],
-      "description": "Transfer the conversation to a human agent with a structured package, never a transcript. Use it when a tool or policy says handoff, when the customer asks for a person, for a lost, stolen or cloned card, for complaints, after a tool failure, or when you cannot understand the request after one clarifying question. Put in verified_facts only facts returned by tools, and in evidence the meta.tool_call_id of those results. Attach confirmation_id when a dispute draft exists. Do not write names, document numbers, phones, e-mails or card numbers. Afterwards give the ticket_id and say a specialist will follow up; never say a case was created unless create_dispute_case returned verified=true.",
+      "description": "Transfer the conversation to a human agent with a structured package, never a transcript. Use it when a tool or policy says handoff, when the customer asks for a person, for any lost, stolen or cloned card or card block request (no tool can block a card; never say the card was blocked), for complaints, after a tool failure, or when you cannot understand the request after one clarifying question. Put in verified_facts only facts returned by tools, and in evidence the meta.tool_call_id of those results. Attach confirmation_id when a dispute draft exists. Do not write names, document numbers, phones, e-mails or card numbers. Afterwards give the ticket_id and say a specialist will follow up; never say a case was created unless create_dispute_case returned verified=true.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -1799,6 +1800,7 @@
             "enum": [
               "customer_status_restricted",
               "suspected_card_compromise",
+              "card_block_request",
               "explicit_human_request",
               "tool_failure",
               "low_intent_confidence",
@@ -2480,6 +2482,7 @@
           "enum": [
             "customer_status_restricted",
             "suspected_card_compromise",
+            "card_block_request",
             "explicit_human_request",
             "tool_failure",
             "low_intent_confidence",

@@ -612,7 +612,7 @@ payload = {"v": 1, "sid": "<22 random base64url>", "sub": "<customer_id>", "iat"
     - `open_questions`: up to 6 strings of up to 200 characters;
   - optional `confirmation_id`, `candidate_transaction_ids` (up to 5) and `idempotency_key`.
 - **The `reason_code` enum** is `[t.reason for t in handoff.triggers_in_order] + ["complaint_routing"]`:
-  - `customer_status_restricted`, `suspected_card_compromise`, `explicit_human_request`, `tool_failure`;
+  - `customer_status_restricted`, `suspected_card_compromise`, `card_block_request`, `explicit_human_request`, `tool_failure`;
   - `low_intent_confidence`, `no_match_after_clarification`, `outside_dispute_window`, `amount_above_threshold`;
   - `complaint_routing`.
   - `complaint_routing` comes from `scope.on_other_complaint`. It is built at load time, and the enum in `tool_schemas.json` must equal it (test).
@@ -631,7 +631,7 @@ payload = {"v": 1, "sid": "<22 random base64url>", "sub": "<customer_id>", "iat"
      - Every other reason is `not_verifiable` (customer words).
      - The result is `consistent`, `inconsistent` or `not_verifiable`, recorded on the ticket and in the audit.
   7. **Routing.**
-     - Queues: `card_security` for `suspected_card_compromise`, `account_restrictions` for `customer_status_restricted`, `complaints` for `complaint_routing`, and `disputes` otherwise.
+     - Queues: `card_security` for `suspected_card_compromise` and `card_block_request`, `account_restrictions` for `customer_status_restricted`, `complaints` for `complaint_routing`, and `disputes` otherwise.
      - Priority is the draft's priority when a draft is attached, `high` for `suspected_card_compromise` (policy priority rule 1), and null (untriaged) otherwise.
      - `first_response_hours` comes from `priority.first_response_hours` when the priority is set.
   8. **Dedupe.** A repeated `idempotency_key` in the same conversation and session, or the same `(conversation_id, reason_code, draft_id, session)`, returns the existing ticket with `replayed: true`. The session is part of both keys, so a verified handoff after an unverified one, or another customer's handoff on the same device, gets its own ticket.
@@ -946,6 +946,12 @@ Tool-level checks, independent of the model's wording:
 | `tool_failure` / transactions_transient (3) | `get_transactions` timeout, `failing_attempts` 1 or 2 | As specific; `find` succeeds on attempt 2 or 3 | Audit `attempts` 2 or 3, `ok`; case verified | `create_case` |
 | `tool_failure` / create_case_error (3) | `create_case` error, `failing_attempts=99` | T1: `find`, `prepare`. T2: `create` → `UNAVAILABLE` (`write_state=not_written`) → `handoff_to_human(tool_failure, confirmation_id)` | No case row; ticket with draft `pending_human_review` | `handoff` |
 | `multilingual_ambiguity` / portunhol_dispute (10) | Valid | As specific, with `language` = the dominant language (the scenario language) for `prepare` and the replies | Case `language` = the scenario language | `create_case` |
+
+**Paths with no e2e category.** The replay oracle follows the policy on them too:
+
+- **A card request without movements the customer did not make** (lost, stolen or cloned card, block or freeze): T1 `handoff_to_human(card_block_request)` with no lookups, queue `card_security`, untriaged, no draft. After the clarifying question of an ambiguous card message it is `clarify_then_handoff`.
+- **An attack next to a real request** (another customer's data, social engineering, injected text): no tool takes another customer's id, so nothing is disclosed, and the real request follows its own row of this table.
+- **A Closed or Suspended customer who asks for a person:** the gate decides first, so the reason is `customer_status_restricted`.
 
 **Acceptance.** A scripted driver that maps `turns[].script` to these calls deterministically, with no model, must reproduce `expected.outcome`, `handoff_reason`, `transaction_id` and the case fields for 280 of 280 scenarios (§12).
 

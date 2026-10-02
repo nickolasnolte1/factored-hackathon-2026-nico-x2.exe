@@ -39,8 +39,8 @@ CREDIT_TYPES = ("Credit Card", "Personal Loan", "Mortgage")
 BALANCE_KIND = {"Savings Account": "funds", "Checking Account": "funds", "Debit Card": "funds", "Investment": "funds",
                 "Credit Card": "outstanding_debt", "Personal Loan": "outstanding_debt", "Mortgage": "outstanding_debt",
                 "Insurance": "unspecified"}
-QUEUES = {"suspected_card_compromise": "card_security", "customer_status_restricted": "account_restrictions",
-          "complaint_routing": "complaints"}
+QUEUES = {"suspected_card_compromise": "card_security", "card_block_request": "card_security",
+          "customer_status_restricted": "account_restrictions", "complaint_routing": "complaints"}
 TRANSACTION_LEVEL_REASONS = ("outside_dispute_window", "amount_above_threshold")
 INTERNAL_POLICY_PATHS = ("handoff.amount_usd_threshold", "handoff.threshold_calibration", "priority.high_amount_usd",
                          "priority.medium_amount_usd", "priority.calibration", "transaction_matching",

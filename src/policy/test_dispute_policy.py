@@ -42,6 +42,7 @@ def flow(turns, **kw):
 
 
 UNREC = "dispute_unrecognized_charge"
+CARD = "card_lost_or_block"
 
 
 class PolicyRules(unittest.TestCase):
@@ -88,6 +89,15 @@ class PolicyRules(unittest.TestCase):
         self.assertEqual(dp.priority({"dispute_type": "unrecognized", "amount_usd": 10}), "medium")
         self.assertEqual(dp.priority({"dispute_type": "incorrect", "amount_usd": 600}), "medium")
         self.assertEqual(dp.priority({"dispute_type": "incorrect", "amount_usd": 60}), "low")
+
+    def test_conversation_triggers_follow_the_policy_order(self):
+        order = [t["reason"] for t in dp.load_policy()["handoff"]["triggers_in_order"]][:4]
+        self.assertEqual(order, ["customer_status_restricted", "suspected_card_compromise", "card_block_request",
+                                 "explicit_human_request"])
+        self.assertEqual(dp.requires_handoff({"customer_status": "Closed", "explicit_human_request": True}),
+                         (True, "customer_status_restricted"))
+        self.assertEqual(dp.handoff_reasons({"card_block_request": True, "explicit_human_request": True}),
+                         ["card_block_request", "explicit_human_request"])
 
     def test_decline_codes(self):
         self.assertEqual(dp.decline_explanation("51")["reason"], "insufficient_funds")
@@ -161,6 +171,78 @@ class ReferenceFlow(unittest.TestCase):
         r = dp.expected_outcome(flow([{"offset_s": 0, "acts": {"intent": "account_payment_inquiry",
                                                                "inquiry": {"kind": "decline", "claim": {"date": "2025-03-19"}}}}]))
         self.assertEqual((r["outcome"], r["answer_facts"]["reason"]), ("answer", "insufficient_funds"))
+
+
+class AuditedPaths(unittest.TestCase):
+    """The three paths where the reference flow used to depart from the written policy."""
+
+    def test_regression_plain_card_block_is_not_a_compromise(self):
+        # was ('handoff', 'suspected_card_compromise') for every card request
+        r = dp.expected_outcome(flow([{"offset_s": 0, "acts": {"intent": CARD}}]))
+        self.assertEqual((r["outcome"], r["handoff_reason"], r["intent"]), ("handoff", "card_block_request", CARD))
+        self.assertEqual((r["case_fields"], r["trace"]), (None, ["turn 1: card block request"]))
+
+    def test_card_requests(self):
+        compromise = {"intent": CARD, "suspected_compromise": True, "claim": {"amount": 250}}
+        r = dp.expected_outcome(flow([{"offset_s": 0, "acts": compromise}]))
+        self.assertEqual((r["outcome"], r["handoff_reason"]), ("handoff", "suspected_card_compromise"))
+        ambiguous = {"intent": CARD, "ambiguous": True, "acceptable_intents": [CARD, UNREC]}
+        r = dp.expected_outcome(flow([{"offset_s": 0, "acts": ambiguous},
+                                      {"offset_s": 60, "acts": {"clarifies_intent": CARD}}]))
+        self.assertEqual((r["outcome"], r["handoff_reason"]), ("clarify_then_handoff", "card_block_request"))
+        r = dp.expected_outcome(flow([{"offset_s": 0, "acts": ambiguous},
+                                      {"offset_s": 60, "acts": {"clarifies_intent": UNREC, "claim": {"amount": 250}}},
+                                      {"offset_s": 90, "acts": {"confirm": True}}]))
+        self.assertEqual((r["outcome"], r["transaction_id"]), ("clarify_then_create_case", "T1"))
+        r = dp.expected_outcome(flow([{"offset_s": 0, "acts": {"intent": CARD, "explicit_human": True}}]))
+        self.assertEqual(r["handoff_reason"], "card_block_request")
+        r = dp.expected_outcome(flow([{"offset_s": 0, "acts": {"intent": CARD}}],
+                                     customer={"customer_id": CID, "customer_status": "Suspended"}))
+        self.assertEqual(r["handoff_reason"], "customer_status_restricted")
+
+    def test_regression_attack_with_a_real_dispute_serves_the_dispute(self):
+        # was ('refuse', None): the dispute in the same message was not served
+        for attack in ({"attack": "other_customer_data", "requests_other_customer": True},
+                       {"attack": "social_engineering"}):
+            r = dp.expected_outcome(flow([{"offset_s": 0, "acts": {"intent": UNREC, "claim": {"amount": 250}, **attack}},
+                                          {"offset_s": 60, "acts": {"confirm": True}}]))
+            self.assertEqual((r["outcome"], r["transaction_id"]), ("create_case", "T1"), attack)
+            self.assertEqual(r["trace"][0], f"turn 1: refuse {attack['attack']}, serve the real request")
+
+    def test_attacks_alone_are_still_refused(self):
+        for acts in ({"intent": "out_of_scope", "attack": "other_customer_data", "requests_other_customer": True},
+                     {"intent": "out_of_scope", "attack": "social_engineering"}):
+            r = dp.expected_outcome(flow([{"offset_s": 0, "acts": acts}]))
+            self.assertEqual((r["outcome"], r["intent"], r["case_fields"]), ("refuse", "out_of_scope", None))
+        r = dp.expected_outcome(flow([{"offset_s": 0, "acts": {"intent": UNREC, "claim": {"amount": 250}}},
+                                      {"offset_s": 60, "acts": {"attack": "other_customer_data", "requests_other_customer": True}},
+                                      {"offset_s": 90, "acts": {"confirm": True}}]))
+        self.assertEqual((r["outcome"], r["transaction_id"]), ("create_case", "T1"))
+
+    def test_regression_restricted_status_wins_over_a_request_for_a_person(self):
+        # was ('handoff', 'explicit_human_request'): the explicit request was checked first
+        r = dp.expected_outcome(flow([{"offset_s": 0, "acts": {"intent": UNREC, "explicit_human": True, "claim": {"amount": 250}}}],
+                                     customer={"customer_id": CID, "customer_status": "Closed"}))
+        self.assertEqual((r["outcome"], r["handoff_reason"]), ("handoff", "customer_status_restricted"))
+        r = dp.expected_outcome(flow([{"offset_s": 0, "acts": {"explicit_human": True}}],
+                                     customer={"customer_id": CID, "customer_status": "Suspended"}))
+        self.assertEqual((r["handoff_reason"], r["trace"]), ("customer_status_restricted", ["turn 1: customer status Suspended"]))
+
+    def test_regression_restricted_status_wins_over_complaint_routing(self):
+        # was ('handoff', 'complaint_routing'): complaints skipped the restricted-status trigger
+        r = dp.expected_outcome(flow([{"offset_s": 0, "acts": {"intent": "other_complaint"}}],
+                                     customer={"customer_id": CID, "customer_status": "Closed"}))
+        self.assertEqual((r["outcome"], r["handoff_reason"]), ("handoff", "customer_status_restricted"))
+        r = dp.expected_outcome(flow([{"offset_s": 0, "acts": {"intent": "other_complaint"}}]))
+        self.assertEqual((r["outcome"], r["handoff_reason"]), ("handoff", "complaint_routing"))
+
+    def test_explicit_request_for_active_customers(self):
+        r = dp.expected_outcome(flow([{"offset_s": 0, "acts": {"intent": UNREC, "claim": {"amount": 250}}},
+                                      {"offset_s": 60, "acts": {"explicit_human": True}}]))
+        self.assertEqual((r["outcome"], r["handoff_reason"], r["intent"]), ("handoff", "explicit_human_request", UNREC))
+        r = dp.expected_outcome(flow([{"offset_s": 0, "acts": {"intent": UNREC, "claim": {"merchant": "uber"}}},
+                                      {"offset_s": 60, "acts": {"explicit_human": True}}]))
+        self.assertEqual((r["outcome"], r["handoff_reason"]), ("clarify_then_handoff", "explicit_human_request"))
 
 
 if __name__ == "__main__":
