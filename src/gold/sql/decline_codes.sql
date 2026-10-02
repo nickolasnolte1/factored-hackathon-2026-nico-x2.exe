@@ -1,10 +1,10 @@
--- Gold · decline_codes: team-made reference to explain a declined movement from its response code.
+-- Gold · decline_codes: project reference (synthetic) to explain a declined movement from its response code.
 -- Spec: gold_tables.json. Sources: src/policy/dispute_policy.json (decline_codes, v{policy_version}) and, for the
 -- observed counts only, silver.transactions and silver.products (pinned Delta versions in the job).
 --   * reason, customer_message_key and cards_only come from the policy (the policy_decline_codes placeholder; the
 --     policy's 'null' entry is the 'missing' key); they are never re-typed here. '00' is not a decline: it is added so that
 --     every decline_code_key of gold.customer_transactions has a row.
---   * The explanation texts are team-written. Codes are templated in the source (report Q4.8): 05, 14, 51 and 54 each
+--   * The explanation texts were generated for the project (automated authoring, not hand-written). Codes are templated in the source (report Q4.8): 05, 14, 51 and 54 each
 --     take about 24% of declines on every product type, so a card-only code (14, 54) on an account, loan, investment
 --     or insurance movement takes the insufficient-data path (non_card_explanation_*) instead of a wrong reason.
 --   * Explain only Declined movements: the same codes also appear on Pending and Reversed rows.

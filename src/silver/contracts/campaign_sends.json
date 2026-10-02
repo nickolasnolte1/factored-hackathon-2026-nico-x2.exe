@@ -8,7 +8,7 @@
   "event_time": "event_ts",
   "load": {
     "cadence": "daily",
-    "notes": "One file per business day (process_date; 1,083 files). customers and marketing_campaigns are joined from Bronze (broadcast) for the timeline and consent flags.",
+    "notes": "One file per calendar day (process_date, weekends included; 1,083 files). customers and marketing_campaigns are joined from Bronze (broadcast) for the timeline and consent flags.",
     "partition_by": [],
     "cluster_by": ["event_date"],
     "max_quarantine_rate": 0.01

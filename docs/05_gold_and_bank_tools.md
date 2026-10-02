@@ -1,12 +1,12 @@
 # 05 — Gold Layer and Bank Tools
 
-_Gold built on 2026-09-30 from pinned Silver versions. Every figure below comes from the Gold tables and the `workspace.ops` run log. Code: [`src/gold/`](../src/gold/)._
+_Gold built on 2026-09-30 from pinned Silver versions. Figures below come from the Gold tables and the `workspace.ops` run log, plus read-only checks against Silver and the scenario panel where stated. Code: [`src/gold/`](../src/gold/)._
 
 ## Gold layer
 
 ### Summary
 
-- **6 tables in `workspace.gold`**, the only tables the bank tools read. They hold ids, amounts, dates, statuses, flags and reference texts, and no personal data: no names, e-mails, phones, addresses, document numbers, dates of birth, IPs or full product numbers.
+- **6 tables in `workspace.gold`**, the only bank data the bank tools read (besides the cases and tickets the tools write themselves in `workspace.ops`). They hold ids, amounts, dates, statuses, flags and reference texts, and no direct identifiers: no names, e-mails, phones, addresses, document numbers, dates of birth, IPs or full product numbers. Gold is pseudonymized, not anonymous: the document survives as an unkeyed hash that can be reversed by enumeration (DEV ONLY, section 4), and `customer_id` doubles as the customer number.
 - **Reconciled with Silver.** Identity and profile have 150,000 rows (= `silver.customers`), products 400,000 (= `silver.products`), transactions 4,425,008 (= `silver.transactions`). Every Gold transaction carries the same amount, currency, date, status and code as its Silver row. Primary keys are unique and non-null in all six tables.
 - **61 of 61 checks pass** per build: 56 hard, 5 warn. They cover keys, row reconciliation, privacy (columns and values), grounding, policy flags and the report baseline.
 - **Policy-driven.** Eligibility, the handoff threshold, restricted statuses, card types and decline codes are rendered from [`dispute_policy.json`](../src/policy/dispute_policy.json), never re-typed in SQL. A 4,457-row sample of the dispute flags is re-derived with `dispute_policy.py`: 0 differences.
@@ -99,7 +99,7 @@ Gold is a full rebuild on every run: 4.4M transactions take 37 s, and the whole 
 
 Ownership by the session customer and the 90-day window depend on the request, so the tools check them at request time.
 
-**`decline_codes`.** `reason`, `customer_message_key` and `cards_only` come from the policy (its `null` entry is the `missing` key). The ES and PT texts are team-written. `00` is added (not a decline) so that every `decline_code_key` has a row.
+**`decline_codes`.** `reason`, `customer_message_key` and `cards_only` come from the policy (its `null` entry is the `missing` key). The ES and PT texts were generated for the project by an automated authoring process (not hand-written; no native-speaker review is recorded). `00` is added (not a decline) so that every `decline_code_key` has a row.
 
 | Code | Reason | Applies to | Declined rows | … on non-card products |
 |---|---|---|---|---|
@@ -113,7 +113,7 @@ Ownership by the session customer and the 90-day window depend on the request, s
 - **Templated codes.** Codes are templated in the source (report Q4.8), so 14 and 54 also appear on accounts, loans, investments and insurance. There, `non_card_explanation_es/pt` says there is not enough data to explain the decline and offers a human, as `dispute_policy.decline_explanation` does.
 - **Only Declined movements are explained.** The same codes also appear on Pending and Reversed rows.
 
-**`contact_baseline`.** The 25 metrics of section 9 (plus the all-contacts FCR of section 2) are recomputed from Silver on every build, with numerator, denominator and n. All 25 are within rounding of the published values (warn check `reconcile:report_section_9`). Examples:
+**`contact_baseline`.** The 24 metrics of section 9, plus the all-contacts FCR of section 2 (25 rows), are recomputed from Silver on every build, with numerator, denominator and n. All 25 are within rounding of the published values (warn check `reconcile:report_section_9`). Examples:
 
 | Metric | Gold value | Report |
 |---|---|---|
@@ -147,7 +147,7 @@ Every check is logged in `workspace.ops.dq_results` with `table_name = gold.<tab
 | `policy:all_codes_present`, `coverage:silver_codes`, `text:explanations_present`, `policy:decline_matches_reference` | hard | decline_codes |
 | `not_null:value` (hard), `reconcile:report_section_9` (warn) | | contact_baseline |
 
-**Recall of the value scan.** Run read-only on `silver.customers`, the same patterns flag 147,016 of 147,016 e-mails, 145,293 of 145,293 phones and 150,000 of 150,000 document numbers. Street addresses carry no detectable pattern, so the column-name rule is what keeps them out.
+**Recall of the value scan.** Run read-only on `silver.customers`, the same patterns flag 147,016 of 147,016 e-mails, 145,293 of 145,293 mobile phones, 74,947 of 74,947 landline phones and 150,000 of 150,000 document numbers. Street addresses carry no detectable pattern, so the column-name rule is what keeps them out.
 
 ### 7. How to run
 
@@ -179,9 +179,9 @@ Silver versions read: customers v1, products v1, transactions v2, call_center_in
 - **Snapshot data.** Balances and limits are the Silver snapshot as of 2026-06-18 (`balance_as_of`), not the balance at a session's time. Events end on 2026-06-18.
 - **Rebuild after Silver changes.** Gold does not refresh incrementally. After a Silver run, rerun `build_gold`; the table properties show which Silver versions a table was built from.
 - **`amount_usd` is the source's fixed-rate equivalent.** It is used for the policy thresholds only, never as a customer-facing conversion.
-- **Policy flags are a pre-filter.** The tools still apply ownership by session, the 90-day window and the handoff order from `dispute_policy.py` at request time.
+- **Policy flags are not used by the tools.** The Gold build checks them against the policy, but the tools decide eligibility, ownership by session, the 90-day window and the handoff order with `dispute_policy.py` at request time.
 - **Merchant names are a fixed list of 24** that all pass the safe-charset check. Real merchant descriptors could carry injected text, so the tools treat every tool output as data.
-- **Retention.** Gold holds no personal data. Earlier table versions stay readable through Delta time travel until `VACUUM` (default retention 7 days). A customer removed from Silver therefore disappears from current Gold on the next build, and from its history after retention.
+- **Retention.** Gold holds no direct identifiers, but it is pseudonymized data (section 4). Earlier table versions stay readable through Delta time travel until `VACUUM` (default retention 7 days). A customer removed from Silver therefore disappears from current Gold on the next build, and from its history after retention.
 
 ## Bank tools
 
@@ -227,11 +227,11 @@ flowchart LR
     p8 --> audit[("Audit: JSONL, workspace.ops.tool_audit")]
 ```
 
-- **The runtime sits between the model and the service.** It shows the secure authentication form, keeps the session token, and adds the `ToolContext` (conversation, turn, trace id) to every call. The model only produces a tool name and arguments, and only receives the result envelope: `ok`, `data` or `error`, `warnings`, and `meta` (`tool_call_id`, the service clock `now`, `policy_version`).
+- **The runtime sits between the model and the service.** It is not built yet: today the demo, the replay and the tests play its part. It will show the secure authentication form, keep the session token, and add the `ToolContext` (conversation, turn, trace id) to every call. The model only produces a tool name and arguments, and only receives the result envelope: `ok`, `data` or `error`, `warnings`, and `meta` (`tool_call_id`, the service clock `now`, `policy_version`).
 - **Two interchangeable repositories.**
   - `LocalRepository` reads a read-only SQLite snapshot of Gold and keeps cases and tickets in a separate store (in memory by default). Every test and every replayed scenario therefore starts clean.
   - `DatabricksRepository` reads `workspace.gold` through the SQL Statement Execution API. It uses named parameters only, and the catalog and schema names are the only text placed into SQL. It writes `workspace.ops.dispute_cases`, `ops.handoff_tickets` and `ops.tool_audit`.
-  - The live tests check that both return identical model envelopes.
+  - A live test checks that both return identical model envelopes (without `meta`) for 4 read tools (overview, products, recent movements, candidate search) on 5 panel customers.
 - **Modules.** See the [bank tools README](../src/bank_tools/README.md).
 
 ### 11. Identity and sessions
@@ -359,7 +359,7 @@ flowchart LR
   - It is deduplicated by idempotency key within the session, or by (conversation, reason, draft, session).
   - An attached draft puts its movement with a human for 24 h, and a card-compromise ticket does the same for the customer's disputes. No automatic case follows (section 14).
   - It is written, then read back.
-  - If the write fails, the result is `UNAVAILABLE` with `next_action = static_fallback`: the runtime shows a pre-written ES/PT contact message without calling the model.
+  - If the write fails, the result is `UNAVAILABLE` with `next_action = static_fallback`: the runtime (not built yet) is to show a pre-written ES/PT contact message without calling the model. That message does not exist yet.
 - **What the human agent receives:** the request, the verified facts, the actions taken, the evidence and the open questions.
 
 ### 16. Error model
@@ -447,7 +447,7 @@ Every error is `{code, message, retryable, details}`:
 
 ### 20. Test results
 
-The acceptance suite in [`tests/bank_tools/`](../tests/bank_tools/) was written from the contract, the schemas, the policy and `gold_tables.json` only, without reading the implementation. It runs over a small synthetic fixture whose expected values are computed with `dispute_policy.py`:
+The 265 acceptance tests in [`tests/bank_tools/`](../tests/bank_tools/) (every file except `test_security_redteam.py`) were written from the contract, the schemas, the policy and `gold_tables.json`, and reach the service only through a harness built on the contract's interface. Their header notes say the implementation was not read; the repository cannot show this, since the service and the tests were committed together. The 41 security tests (section 24) were written against the implementation. The acceptance tests run over a small synthetic fixture whose expected values are computed with `dispute_policy.py`:
 
 - 4 customers: active, "other customer", Closed and Suspended;
 - 8 products and 28 movements, covering every edge case of the policy and the contract.
@@ -468,7 +468,7 @@ The acceptance suite in [`tests/bank_tools/`](../tests/bank_tools/) was written 
 
 **Decisions recorded during verification** (the contract decides which side is wrong):
 
-- **No test failed.** No code change was needed on either side.
+- **No test failed** in the first full run, as recorded when the suite was written (that run is not kept in the repository). No code change was needed on either side.
 - **Over-long handoff text: kept as implemented.** `tool_schemas.json` declares the package limits (`maxLength` 600, `maxItems` 12). The service cuts over-long text and reports `truncated_fields` instead of returning `VALIDATION_ERROR`.
   - The schema file wins for argument shapes, and the contract wins for behavior. Contract section 3.15 makes the cut the documented behavior: a handoff is the safe fallback and is never refused for length.
   - The limits stay in the schema as the shape the model is told. The test accepts either answer, as long as the stored ticket never exceeds the limits.
@@ -551,10 +551,11 @@ Every expected outcome was reached: create_case 90, clarify_then_create_case 44,
 | Policy requires a human (6 + 6) | Create on an above-threshold movement gives `POLICY_BLOCKED` with the confirmation usable for the handoff; a restricted customer's data tools give `POLICY_BLOCKED` | 6 + 6 |
 | `promise_refund`, `give_credit_or_investment_advice`, `answer_in_wrong_language` | Structural only: no tool performs refunds or advice, and texts come in the requested language (case `language`, decline and scope texts). The wording itself is checked in the agent evaluation | 134 + 28 |
 
-**Is the replay a real test?** Each change below was applied in memory to the service, and the replay was rerun. Every one made scenarios fail:
+**Is the replay a real test?** Twelve changes were applied in memory to the service, one at a time, and the replay was rerun. Ten made scenarios fail (table below). The other two failed 0 scenarios: each removed only one of the two guards on flagged channels (the service narrating the channel while Gold still withholds it, or the snapshot serving the channel while the service still withholds it), and the other guard masked it. Removing both guards fails 14 scenarios (last row).
 
 | Change to the service | Scenarios failing | Caught by |
 |---|---|---|
+| Customer id put into `get_customer_overview` (as `country_code`) | 236 | The output allow-list turns the overview into `INTERNAL`, so outcome, matching and handoff checks fail |
 | Merchant text not flagged | 10 | `merchant_wrapped_and_flagged` |
 | Same-turn confirmation rule off | 172 | `same_turn_refused`, `create_case` trace, case rows |
 | Fault timeouts ignored | 20 | outcome, ticket, `get_transactions` attempts |
@@ -565,13 +566,13 @@ Every expected outcome was reached: create_case 90, clarify_then_create_case 44,
 | Customer id added to `list_products`, allow-list check off | 8 | hygiene |
 | Flagged channel narrated at both layers (Gold and service) | 14 | hygiene, `narrate_flagged_channel` |
 
-**What failed and why.** The first replay run had 6 failures, in the 6 `restricted_customer` scenarios. After the restricted handoff, the oracle read the ticket back with `get_case_status`, and the gate returned `POLICY_BLOCKED`. That is the contract (section 3.0 lists only overview, policy and handoff as open to restricted customers), so the replay expectation was corrected. The customer still receives the `ticket_id` and queue from the handoff result. No tool defect was found.
+**What failed and why.** As recorded during the build (the run is not kept in the repository), the first replay run had 6 failures, in the 6 `restricted_customer` scenarios. After the restricted handoff, the oracle read the ticket back with `get_case_status`, and the gate returned `POLICY_BLOCKED`. That is the contract (section 3.0 lists only overview, policy and handoff as open to restricted customers), so the replay expectation was corrected. The customer still receives the `ticket_id` and queue from the handoff result. No tool defect was found.
 
 ### 22. Limitations and what production would need
 
 **Limitations of the mock:**
 
-- **Synthetic data and policy.** The policy is a team policy with no legal standing.
+- **Synthetic data and policy.** The policy is a synthetic project policy with no legal standing.
 - **Snapshot balances.** Balances and `effective_status` are as of 2026-06-18, even when the clock is earlier. Transactions are always clock-filtered.
 - **No real actions.** No refund, card block, notification or case-management integration exists. Case and ticket statuses never advance.
 - **Unkeyed identity hash** (section 4).
@@ -611,7 +612,7 @@ Configuration and its DEV ONLY defaults: contract section 11 and [`.env.example`
 
 ### 24. Security review
 
-_An independent red-team pass over the service, run locally on 2026-09-30 against the fixture snapshot of the tests and the panel snapshot `data/bank_tools/snapshot_panel.sqlite`. Every finding has a test in [`tests/bank_tools/test_security_redteam.py`](../tests/bank_tools/test_security_redteam.py) that failed before its fix and passes after it. Contract sections 2, 3, 6 and 7 were updated to match._
+_An internal red-team pass over the service, run locally on 2026-09-30 in the same build session that produced the service (not an external or independent review), against the fixture snapshot of the tests and the panel snapshot `data/bank_tools/snapshot_panel.sqlite`. Every finding has a test in [`tests/bank_tools/test_security_redteam.py`](../tests/bank_tools/test_security_redteam.py) that passes with the fix. The review notes say each of these tests failed before its fix; the service, the fixes and the tests were committed together, so the pre-fix runs are not in the repository. Contract sections 2, 3, 6 and 7 were updated to match._
 
 **Attacks tried:**
 

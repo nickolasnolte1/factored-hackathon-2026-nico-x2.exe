@@ -171,7 +171,7 @@ TRANSACTIONS = [
 ]
 TXN_BY_ID = {t["transaction_id"]: t for t in TRANSACTIONS}
 
-# Team-made fixture texts; the FXT-* markers prove that explain_decline quotes the table, not hard-coded text.
+# Fixture texts made for these tests; the FXT-* markers prove that explain_decline quotes the table, not hard-coded text.
 DECLINE_TEXTS = {
     "00": ("FXT-ES-00 operacion aprobada.", "FXT-PT-00 operacao aprovada.", None, None),
     "05": ("FXT-ES-05 rechazo general del emisor (codigo 05).", "FXT-PT-05 recusa generica do emissor (codigo 05).",

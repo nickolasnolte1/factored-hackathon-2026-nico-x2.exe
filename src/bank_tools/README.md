@@ -18,7 +18,7 @@ python -m src.bank_tools.demo [--customer CLI-XXXXXXXXXXXX] [--language pt] [--n
 #    outcome, must_not constraints, policy_trace, policy parity and output hygiene; exit code 1 on any failure
 python -m src.bank_tools.replay [--only <category|subtype|scenario_id>] [-v] [--json data/bank_tools/replay_report.json]
 
-# 4. Acceptance tests (contract section 12), written from the contract only; the live Databricks tests are opt-in
+# 4. Acceptance tests (contract section 12, run through a contract-based harness) and security tests; the live Databricks tests are opt-in
 python -m pytest tests/bank_tools -q
 BANK_TOOLS_TEST_DATABRICKS=1 DATABRICKS_CONFIG_PROFILE=factored DATABRICKS_WAREHOUSE_ID=<id> python -m pytest tests/bank_tools -q
 
@@ -61,8 +61,8 @@ Configuration and its DEV ONLY defaults: contract section 11 and [`.env.example`
 
 ## Checks run so far
 
-- **Acceptance tests** (`tests/bank_tools/`, written from the contract without reading the implementation): 265 of 265 pass, including the 3 live Databricks tests (decoy challenge for an unknown document, Gold reads, identical outputs from the local snapshot and from Gold).
-- **Security review** (`tests/bank_tools/test_security_redteam.py`): 12 findings (1 high, 5 medium, 6 low), all fixed, each with a test that failed before its fix. The suite now has 306 tests, and all pass. Attacks, fixes and residual risks are in [report 05, section 24](../../docs/05_gold_and_bank_tools.md).
+- **Acceptance tests** (`tests/bank_tools/` except `test_security_redteam.py`, written from the contract and run through a contract-based harness): 265 of 265 pass, including the 3 live Databricks tests (decoy challenge for an unknown document, Gold reads, identical outputs from the local snapshot and from Gold for 4 read tools on 5 panel customers).
+- **Security review** (`tests/bank_tools/test_security_redteam.py`, an internal review run in the same build session as the service): 12 findings (1 high, 5 medium, 6 low), all fixed, each covered by a test that passes with the fix (the review notes say each failed before its fix; the pre-fix runs are not kept in the repository). The suite now has 306 tests, and all pass. Attacks, fixes and residual risks are in [report 05, section 24](../../docs/05_gold_and_bank_tools.md).
 - **Scenario replay** (`replay.py`): 280 of 280 e2e scenarios pass, with 6,423 tool-level checks and 0 failures. Every expected outcome, handoff reason, transaction and case field is reproduced. Audit attempt counts match each scenario's `policy_trace`. Results per category are in [report 05](../../docs/05_gold_and_bank_tools.md).
-- **Repository parity.** Read tools return identical model envelopes from the local snapshot and from Databricks. A case and a ticket were written to `workspace.ops` with read-back, then purged.
+- **Repository parity.** In the live test, 4 read tools (overview, products, recent movements, candidate search) return identical model envelopes from the local snapshot and from Databricks for 5 panel customers. A case and a ticket were written to `workspace.ops` with read-back, then purged.
 - **Reproducible snapshot.** Re-exporting the panel snapshot from Gold gives the same per-table sha256 checksums.

@@ -57,7 +57,7 @@
     "credit_score": {"type": "int", "nullable": true, "source": "credit_score", "min": 300, "max": 850, "rule_ref": 21,
       "description": "Credit score on the 300-850 scale. NULL for 15.0% of customers (see credit_score_null_reason); never imputed. Carries no delinquency signal (AUC 0.504), so it is not a risk label."},
     "credit_score_null_reason": {"type": "string", "nullable": true, "allowed": ["missing", "invalid"], "rule_ref": 21,
-      "description": "Why credit_score is NULL: 'missing' (not delivered) or 'invalid' (delivered but not a whole number); NULL when credit_score is present. Drives the insufficient-data path."},
+      "description": "Why credit_score is NULL: 'missing' (not delivered) or 'invalid' (delivered but not a whole number); NULL when credit_score is present. Meant for an insufficient-data path (no tool or policy reads it yet)."},
     "estimated_monthly_income": {"type": "decimal(18,2)", "nullable": true, "source": "estimated_monthly_income", "min": 0, "rule_ref": 21,
       "description": "Estimated monthly income in the local currency of the customer's country (scales match MXN, COP and ARS; not stated in the source). NULL for 20.0% of customers; never imputed."},
     "estimated_monthly_income_null_reason": {"type": "string", "nullable": true, "allowed": ["missing", "invalid"], "rule_ref": 21,

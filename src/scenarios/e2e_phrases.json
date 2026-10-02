@@ -1,5 +1,5 @@
 {
-  "about": "Scripted customer turns for the end-to-end agent scenarios (team-written, ES neutral usted/ustedes and pt-BR). Independent of the intent families, so no e2e message repeats a training template. Placeholders: {what} movement phrase, {what_declined}, {amount}, {date}, {merchant}, {product}, {product_de}, {product_em}, {other_customer}, {customer_number}.",
+  "about": "Scripted customer turns for the end-to-end agent scenarios (generated for the project by an automated authoring process, not hand-written; ES neutral usted/ustedes and pt-BR). Kept separate from the intent families, so no e2e message repeats a training template. Placeholders: {what} movement phrase, {what_declined}, {amount}, {date}, {merchant}, {product}, {product_de}, {product_em}, {other_customer}, {customer_number}.",
   "version": "1",
   "es": {
     "movement": {

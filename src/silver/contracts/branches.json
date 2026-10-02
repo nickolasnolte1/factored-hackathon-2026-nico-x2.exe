@@ -15,7 +15,7 @@
   },
   "columns": {
     "branch_id": {"type": "string", "nullable": false, "source": "branch_id", "rule_ref": 22,
-      "description": "Branch identifier (SUC-XXXXXXXX), trimmed and upper-cased. Primary key; referenced by customers, products, service_agents, transactions and complaints (issue 14: most of those references are orphans)."},
+      "description": "Branch identifier (SUC-XXXXXXXX), trimmed and upper-cased. Primary key; referenced by customers, products, service_agents, transactions and complaints. Issue 14: the customer and agent references are almost all orphans (149,995 of 150,000 and 831 of 833); products, transactions and complaints have 0 orphans."},
     "branch_code": {"type": "string", "nullable": false, "source": "branch_code",
       "description": "Short branch code (S + 4 digits), unique per branch."},
     "branch_name": {"type": "string", "nullable": false, "source": "branch_name",

@@ -14,10 +14,10 @@ An AI-first customer service system for a LATAM retail bank (MX / CO / AR), buil
 | `src/silver/02_update_fixture_test.py` | Update-correctness test on labeled fixture tables: new, late, updated, duplicate, invalid and schema-evolved rows |
 | `src/gold/` | Gold: agent-ready, privacy-minimized tables read by the bank tools, with policy-rendered flags and privacy checks (`01_build_gold.py`, `gold_lib.py`, `sql/`, `gold_tables.json`) |
 | `src/bank_tools/` | Mock banking tool service for the agent: 14 tools with sessions, ownership checks, policy enforcement, confirmation before writes, handoff packages and an audit trail, over a local Gold snapshot or Databricks ([contract](src/bank_tools/CONTRACT.md), [README](src/bank_tools/README.md)) |
-| `tests/bank_tools/` | Acceptance tests of the bank tools, written from the contract only, over a small synthetic fixture (live Databricks tests are opt-in), plus the security review's red-team tests (`test_security_redteam.py`) |
-| `src/policy/` | Synthetic dispute-intake policy (`dispute_policy.json`, team-made, not a real bank policy) and its deterministic reference implementation |
+| `tests/bank_tools/` | Acceptance tests of the bank tools, written from the contract and run through a contract-based harness, over a small synthetic fixture (live Databricks tests are opt-in), plus the security review's red-team tests (`test_security_redteam.py`) |
+| `src/policy/` | Synthetic dispute-intake policy (`dispute_policy.json`, prepared for the project by an automated authoring process, not a real bank policy) and its deterministic reference implementation |
 | `src/scenarios/` | ES/PT scenario generator: Silver anchors, intent dataset and end-to-end agent scenarios ([README](src/scenarios/README.md)) |
-| `docs/` | Data findings, architecture, trade-offs, evaluation reports |
+| `docs/` | Data findings, EDA and workflow selection, test scenarios, Silver, Gold and bank tools (architecture and evaluation reports to come) |
 | `docs/03_test_scenarios.md` | Test scenarios (ES/PT): label provenance, splits and leakage checks, e2e categories, audit results |
 | `docs/04_silver_layer.md` | Silver layer: issue-to-rule mapping, checks, watermark/MERGE semantics, freshness, results |
 | `docs/05_gold_and_bank_tools.md` | Gold layer (tables, privacy, identity hash, checks, results) and the bank tools (identity, tool catalog, access control, confirmation, handoff, errors, audit, test and replay results) |

@@ -3,8 +3,9 @@
 # MAGIC # Where customer service fails, and what we build
 # MAGIC **Factored AI & Data Hackathon 2026 · Exploratory data analysis and workflow selection**
 # MAGIC
-# MAGIC This notebook tells the data story behind our choice of workflow. Every chart is computed live from the Bronze layer
-# MAGIC (`workspace.bronze`, raw and pre-dedup, full history Jun 2023 – Jun 2026). The written report is
+# MAGIC This notebook tells the data story behind our choice of workflow. Every data chart in sections 1–4 and the baseline tiles in 5.4
+# MAGIC are computed live from the Bronze layer (`workspace.bronze`, raw and pre-dedup, full history Jun 2023 – Jun 2026). The scorecard
+# MAGIC (5.1–5.2), the issue table (4.5), the targets (5.5) and the plan (5.6–5.9) are fixed content taken from the written report. The written report is
 # MAGIC `docs/02_eda_workflow_selection.md`; the full audit query set is `src/analysis/01_eda_workflow_selection.py`.
 # MAGIC
 # MAGIC **How to read it:** each section opens with its takeaway in one line, then the chart that proves it, then the table
@@ -131,8 +132,8 @@ def pct(num, den, digits=1):
 # MAGIC **Complaint contacts (`Queja`) are 17.1% of all contacts but 41.2% of the unresolved ones: this is where customer service fails.**
 # MAGIC
 # MAGIC Source: `call_center_interactions` (686,296 contacts, every channel, Jun 2023 – Jun 2026) joined to `satisfaction_surveys`.
-# MAGIC Transactional contacts are the largest block, but they already resolve 91.5% at first contact. Satisfaction turns out to be
-# MAGIC a fixed function of resolution, so first-contact resolution (FCR) is the KPI that matters.
+# MAGIC Transactional contacts are the largest block, but they already resolve 91.5% at first contact. Satisfaction turns out to
+# MAGIC depend only on resolution, so first-contact resolution (FCR) is the KPI that matters.
 
 # COMMAND ----------
 
@@ -379,7 +380,7 @@ fig.update_yaxes(tickformat=".0%", range=[0, 0.82])
 fig.update_xaxes(title_text="CSAT score (1 = lowest, 4 = highest)")
 style(
     fig,
-    "Resolution determines satisfaction: resolved contacts score 2–4, unresolved ones 1–3",
+    "Satisfaction depends only on resolution: resolved contacts score 2–4, unresolved ones 1–3",
     f"CSAT, % of surveys in each group · resolved n = {n_res:,} (mean {mean_res:.3f}) · unresolved n = {n_unr:,} (mean {mean_unr:.3f})",
     height=390, legend=True,
 )
@@ -399,7 +400,7 @@ display(pd.DataFrame({
 # MAGIC ### 1.5 · When does demand arrive?
 # MAGIC Tuesday to Friday carry 725–731 contacts a day, Monday 614, Saturday 487 and Sunday half the peak (367). Within the day
 # MAGIC demand is flat: every hour holds 4.1–4.2% of contacts, night hours included (timestamp timezone unconfirmed).
-# MAGIC Staffing needs change by weekday, not by hour.
+# MAGIC This is a pattern of the synthetic data, not a staffing recommendation.
 
 # COMMAND ----------
 
@@ -763,13 +764,13 @@ display(pd.DataFrame({
 # MAGIC **What this means for the build.** Complaints size the demand (about 754 disputes a month) and set the process baseline (37 h median first response, three in four cases open).
 # MAGIC They cannot supply the disputed transaction, the product, the originating call or an outcome label (the SLA-breach flag, for one, sits at 18.5–21.4% whatever the
 # MAGIC resolution time; report Q3.7). The dispute intake therefore identifies the customer and builds each case from their own products and transactions, the only links that pass.
-# MAGIC Because no field links a call to a case, "complaint calls are disputes" stays an explicit assumption. Section 3 checks whether those transactions are clean enough to ground on.
+# MAGIC Because no field links a contact to a case, "complaint contacts are disputes" stays an explicit assumption. Section 3 checks whether those transactions are clean enough to ground on.
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ## 3 · Transactions and labels
-# MAGIC **Transactions are a clean grain to ground a dispute on, but no historical label in them can be learned.**
+# MAGIC **Transaction keys are clean enough to ground a dispute on, but their fraud label cannot be learned.**
 # MAGIC
 # MAGIC `transactions` holds 4.4M rows (Jun 2023 – Jun 2026). We check their integrity, test whether `is_fraud` carries any signal,
 # MAGIC whether `fraud_score` is a fair baseline, what `process_date` really means, and how many candidates a dispute lookup would face.
@@ -1022,7 +1023,7 @@ display(t.round({"Share": 4}))
 
 # MAGIC %md
 # MAGIC ### 3.4 · How many transactions would a dispute intake have to choose from?
-# MAGIC Very few. In the 30 days before a reference date, the median customer has 1 own transaction, 9 in 10 have at most 2
+# MAGIC Very few. In the 30 days before a reference date, the median customer-date has 1 own transaction, 9 in 10 have at most 2
 # MAGIC and 99 in 100 at most 4 (max 10). Finding the disputed charge is a lookup plus a customer confirmation, not a learning
 # MAGIC problem (report Q4.11).
 
@@ -1057,8 +1058,8 @@ fig = go.Figure(go.Bar(
                   f"{n_cd:,})<br>cumulative %{{customdata[2]:.1%}}<extra></extra>"))
 fig.update_xaxes(title_text="Own transactions in the 30 days before the reference date")
 fig.update_yaxes(range=[0, 0.52], tickformat=".0%")
-show(style(fig, f"{cs[cs.bucket <= pq[0.9]].share.sum():.0%} of customers have at most {pq[0.9]} candidate transactions "
-                f"in a 30-day window",
+show(style(fig, f"In {cs[cs.bucket <= pq[0.9]].share.sum():.0%} of customer-dates, the customer has at most {pq[0.9]} candidate "
+                f"transactions in a 30-day window",
            f"Share of customer-dates by own transactions in the 30 days before 15 Mar 2024, 2025 and 2026 · "
            f"n = {n_cust:,} customers with products × 3 dates = {n_cd:,}",
            height=380))
@@ -1074,7 +1075,7 @@ display(t.round({"Share": 3, "Cumulative share": 3}))
 # MAGIC ## 4 · Products, credit and data quality
 # MAGIC **Product status cannot be trusted, credit data carries no risk signal and two documented keys are broken, so Silver has to repair the data before an agent can answer from it.**
 # MAGIC
-# MAGIC Tables: `products` (n = 400,000), `customers` (n = 150,000) and the 22 foreign keys of the data dictionary. Because no credit outcome is learnable,
+# MAGIC Tables: `products` (n = 400,000), `customers` (n = 150,000) and 22 of the 24 foreign keys in the data dictionary (the other 2 belong to the unloaded `digital_events`). Because no credit outcome is learnable,
 # MAGIC credit eligibility can only be a documented rule policy served by a synthetic policy service, never a model.
 
 # COMMAND ----------
@@ -1119,8 +1120,8 @@ tiles([
      "note": f"0.500 is a coin flip · {k['n_pos']:,} of {k['n_pos'] + k['n_neg']:,} scored products > 90 days past due"},
     {"value": pct(k["either_null"], k["cust_n"]), "label": "Customers missing score or income",
      "note": f"{k['either_null']:,} of {k['cust_n']:,} cannot be assessed by a credit policy"},
-    {"value": f"{broken} of 22", "label": "Documented foreign keys broken",
-     "note": f"both point to branches: {k['c_orph']:,} / {k['c_nn']:,} and {k['a_orph']:,} / {k['a_nn']:,} orphans"},
+    {"value": f"{broken} of 22", "label": "Checked foreign keys broken",
+     "note": f"22 of the 24 documented keys checked · both point to branches: {k['c_orph']:,} / {k['c_nn']:,} and {k['a_orph']:,} / {k['a_nn']:,} orphans"},
 ])
 
 # COMMAND ----------
@@ -1161,7 +1162,7 @@ fig.update_layout(barmode="stack")
 fig.update_xaxes(range=[0, 1], tickformat=".0%", dtick=0.25)
 fig.update_yaxes(autorange="reversed")
 n_exp = dict(zip(df.card, df.with_expiry.astype(int)))
-show(style(fig, "Half of all Active cards are already past their expiry date",
+show(style(fig, "Half of the Active cards with an expiry date are already past it",
            f"Active cards with an expiration date, checked against data end (2026-06-17) · credit n = {n_exp['Credit cards']:,} · debit n = {n_exp['Debit cards']:,}",
            height=300, horizontal=True))
 
@@ -1286,7 +1287,8 @@ display(pd.DataFrame({
 
 # MAGIC %md
 # MAGIC ### 4.4 · Do the documented joins hold?
-# MAGIC Almost all. 20 of the 22 documented foreign keys have no orphans, so Silver can enforce them as hard expectations. The two that fail both point to
+# MAGIC Almost all. 20 of the 22 checked foreign keys have no orphans, so Silver can enforce them as hard expectations (the data dictionary
+# MAGIC documents 24; the other 2 belong to `digital_events`, which is not loaded). The two that fail both point to
 # MAGIC `branches` and almost none of their values has a parent, so "your branch" cannot be grounded (issue 14). `complaints.origin_interaction_id` passes only
 # MAGIC because it is always empty (issue 1).
 
@@ -1366,9 +1368,9 @@ fig.add_trace(go.Scatter(
                   "<br>Null share %{customdata[2]:.1%}<extra></extra>"))
 fig.update_xaxes(range=[0, 1], tickformat=".0%", dtick=0.25, title_text="Orphans, % of non-null key values")
 fig.update_yaxes(autorange="reversed", tickfont=dict(color=INK2, size=12), ticksuffix="     ")
-fig = style(fig, f"{len(ok)} of {len(df)} documented keys are intact; the {len(fail)} that fail both point to branches",
-            "Orphan = a non-null foreign-key value with no matching row in the parent table · status PASS = 0 orphans · "
-            f"{len(df)} keys from the data dictionary",
+fig = style(fig, f"{len(ok)} of the {len(df)} checked keys are intact; the {len(fail)} that fail both point to branches",
+            "Orphan = non-null key value with no parent row · PASS = 0 orphans · "
+            f"{len(df)} of the 24 dictionary keys (2 are in digital_events, not loaded)",
             height=640, horizontal=True)
 fig.update_yaxes(showline=False)  # the 0% gridline marks the baseline; an axis line would cut through the PASS markers
 show(fig)
@@ -1389,7 +1391,7 @@ display(pd.DataFrame({
 # MAGIC %md
 # MAGIC ### 4.5 · What must Silver fix before an agent can answer?
 # MAGIC 22 issues came out of the profiling. Each one has its evidence, its impact on the workflow and the Silver rule that handles it; the chip shows the kind of rule.
-# MAGIC This table is the written report's section 6 (static content; the numbers are the verified ones).
+# MAGIC This table is the written report's section 6 (static content; † marks figures that no notebook query reproduces).
 
 # COMMAND ----------
 
@@ -1412,7 +1414,7 @@ ISSUES = [
      "Wrong amount or currency", ["FLAG"],
      "`claim_untraceable`; never FX-convert; intake takes amount and currency from the selected transaction"),
     (4, "Complaint outcome fields random or stale",
-     "SLA flag flat 18.5–21.4%; 45,629 / 46,948 open cases > 30 days; `compensation_granted` holds amounts in 4,641 rows",
+     "SLA flag flat 18.5–21.4%; 45,629 / 46,948 Open or In Process cases > 30 days; `compensation_granted` holds amounts in 4,641 rows†",
      "Invalid labels; wrong status answers", ["FIX", "FLAG"],
      "FIX `compensation_amount` + `compensation_flag`; FIX `sla_derived` from dates; FLAG `stale_status`; never use as labels"),
     (5, "Text reveals the label", "5 descriptions for 67,095 rows (1 per category); subcategory 1:1 with category",
@@ -1421,7 +1423,7 @@ ISSUES = [
      "\"Your card is active\" would be wrong", ["FIX"], "`effective_status = 'Expired'` when `expiration_date < as_of_date`"),
     (7, "Stale last-movement field", "`last_transaction_date` matches 427 / 305,721",
      "Wrong \"last movement\" answer", ["FIX"], "Recompute from `silver.transactions`"),
-    (8, "Activity before opening or registration", "827,610 / 4,425,008 before opening; 829,540 before registration†",
+    (8, "Activity before opening or registration", "827,610 / 4,425,008 before opening†; 829,540 before registration†",
      "Incoherent timelines", ["FLAG", "FIX"], "FLAG; `effective_opening_date = least(opening_date, first transaction)`"),
     (9, "Email is not an identity key",
      "79,930 / 147,016 customers share an email (54.4%); `document_number` unique 150,000 / 150,000",
@@ -1433,17 +1435,18 @@ ISSUES = [
     (12, "`amount_usd` fixed-rate and partly missing", "100% equal amount / 350 or / 4000; 99,477 / 1,987,029 missing",
      "Inconsistent USD equivalents", ["FIX"],
      "Fill with the same fixed rate; daily FX only for customer-facing conversions, labeled as such"),
-    (13, "Two spellings of Mexico", "`Mexico` 40,515 rows, 18,412 of them from Mexican customers",
-     "False \"international\" flag", ["FIX"], "Normalize accents; derive `is_international`"),
+    (13, "Two spellings of Mexico", "`Mexico` 40,515 rows: 18,412 from Mexican customers, 22,103 from Colombian and Argentine customers†",
+     "Comparing countries as text would mark the 18,412 Mexican customers' rows as international (Bronze has no such flag); "
+     "the other 22,103 are genuine foreign transactions", ["FIX"], "Normalize accents; derive `is_international`"),
     (14, "Branch foreign keys broken", "`registration_branch_id` 149,995 / 150,000 orphans; `assigned_branch_id` 831 / 833",
      "\"Your branch\" cannot be grounded", ["QUARANTINE", "CONTRACT"],
-     "QUARANTINE both keys; the other 20 documented keys have 0 orphans → hard expectation"),
-    (15, "`mentioned_products` is random", "545,118 / 548,680 missing; 3,562 / 3,562 foreign",
+     "QUARANTINE both keys; the other 20 checked keys have 0 orphans → hard expectation"),
+    (15, "`mentioned_products` is random", "545,118 / 548,680 mentioned IDs match no product; the 3,562 that exist all belong to another customer",
      "Privacy and grounding hazard", ["DROP"], "Remove the column"),
     (16, "Fields that copy the label",
      "`main_topics` = reason 171,321 / 171,321; sentiment label = bins of the score; surveys = f(`was_resolved`)",
      "Leakage", ["DROP"], "Exclude from features; keep `sentiment_score` only"),
-    (17, "Truncated survey scales", "CSAT 1–4; NPS 2–7 with 0 promoters; `nps_category` null 3,274 / 63,668",
+    (17, "Truncated survey scales", "CSAT 1–4; NPS 2–7 with 0 promoters; `nps_category` null 3,274 / 63,668†",
      "Degenerate KPIs", ["FIX"], "`nps_category` from score; report relative KPIs only"),
     (18, "Implausible type × channel", "1,240,000 / 4,425,008 (28.0%)",
      "Narration sounds wrong", ["FLAG"], "Omit the channel when narrating flagged rows"),
@@ -1497,7 +1500,7 @@ displayHTML(f"""
     <thead><tr>{head}</tr></thead>
     <tbody>{rows}</tbody>
   </table>
-  <div style="font-size:11.5px;color:{MUTED};margin-top:8px">† Single-pass figure, not reproduced in this notebook. Source: docs/02_eda_workflow_selection.md, section 6.</div>
+  <div style="font-size:11.5px;color:{MUTED};margin-top:8px">† Not reproduced by a query in either EDA notebook. Source: docs/02_eda_workflow_selection.md, section 6.</div>
 </div>
 """)
 
@@ -1505,7 +1508,7 @@ displayHTML(f"""
 
 # MAGIC %md
 # MAGIC ## 5 · Decision: workflow, baseline, learned component
-# MAGIC **We build transaction-dispute intake: it has the widest service gap to close, it can be grounded on clean transactions, and it supports a learned component whose labels are valid by construction.**
+# MAGIC **We build transaction-dispute intake: it has the widest service gap to close, it can be grounded on transactions whose keys are clean, and it supports a learned component whose labels are valid by construction.**
 # MAGIC
 # MAGIC The scorecard below condenses sections 1–4 into eight weighted criteria. The baseline to beat is recomputed live from Bronze;
 # MAGIC targets are measured later on a held-out Spanish/Portuguese scenario set.
@@ -1534,7 +1537,7 @@ SCORECARD = [  # (criterion, weight, scores in WORKFLOWS order, evidence in WORK
     ("Grounding data", 0.15, [4, 5, 3, 2], [
         "Customer, products, transactions 100% consistent; complaint history unusable",
         "Balances 100%; transactions 100% consistent",
-        "Status, expiry, declines; but 50.1% of Active cards expired, no card-event data",
+        "Status, expiry, declines; but 50.1% of Active credit cards with an expiry date are past it, no card-event data",
         "Score 85% and income 80% present; no underwriting history"]),
     ("Valid labels + baseline", 0.15, [4, 3, 2, 1], [
         "Labels by construction anchored on real transactions; semantic classes leave room over keywords",
@@ -1608,14 +1611,15 @@ display(scorecard_table.astype(str))
 # MAGIC %md
 # MAGIC ### 5.2 · Does the choice survive a different weighting?
 # MAGIC Only partly, and we say so.
-# MAGIC With equal weights, account/payment leads 4.25 to 4.00. The choice rests on giving service pain the largest weight, which the rubric's
-# MAGIC "problem supported by data" and "baseline to beat" requirements justify. Card support and credit eligibility rank last under both weightings.
+# MAGIC With equal weights, account/payment leads 4.25 to 4.00. The choice rests on giving service pain the largest weight, which we justify with
+# MAGIC the rubric's "problem supported by data" requirement and its call to "establish a baseline". The weights are the team's own: the hackathon
+# MAGIC publishes no weights. Card support and credit eligibility rank last under both weightings.
 
 # COMMAND ----------
 
 fig = go.Figure()
 for name, values, color, rule in [
-    ("Rubric weights (service pain 25%)", WEIGHTED, BLUE, "rubric weights"),
+    ("Team weights (service pain 25%)", WEIGHTED, BLUE, "team weights"),
     ("Equal weights (12.5% each)", EQUAL, ORANGE, "equal weights"),
 ]:
     fig.add_bar(
@@ -1628,14 +1632,14 @@ fig.update_layout(barmode="group")
 fig.update_yaxes(range=[0, 5.4], dtick=1, title_text="Total score (1–5)")
 fig.update_xaxes(tickfont=dict(color=INK2, size=13))
 show(style(fig, "The weighting decides the top spot: equal weights put account/payment first",
-           "Total score per workflow, 1–5, over 8 criteria · rubric: pain 25%; demand, grounding, labels 15% each; risk, feasibility 10%; cost, ES/PT 5%",
+           "Total score per workflow, 1–5, over 8 criteria · team weights: pain 25%; demand, grounding, labels 15% each; risk, feasibility 10%; cost, ES/PT 5%",
            height=400, legend=True))
 
 sensitivity = pd.DataFrame({
     "Workflow": WORKFLOWS,
-    "Rubric-weighted score": [f"{v:.2f}" for v in WEIGHTED],
+    "Team-weighted score": [f"{v:.2f}" for v in WEIGHTED],
     "Equal-weight score": [f"{v:.2f}" for v in EQUAL],
-    "Rank (rubric)": pd.Series(WEIGHTED).rank(ascending=False, method="min").astype(int),
+    "Rank (team weights)": pd.Series(WEIGHTED).rank(ascending=False, method="min").astype(int),
     "Rank (equal)": pd.Series(EQUAL).rank(ascending=False, method="min").astype(int),
 })
 display(sensitivity)
@@ -1645,7 +1649,7 @@ display(sensitivity)
 # MAGIC %md
 # MAGIC ### 5.3 · Why give service pain the largest weight?
 # MAGIC Because it is the gap a new workflow can close.
-# MAGIC Complaint calls leave more than half of contacts unresolved; transactional inquiries leave 8.5%, so account/payment has little left to beat.
+# MAGIC More than half of complaint contacts are left unresolved; transactional inquiries 8.5%, so account/payment has little left to beat.
 
 # COMMAND ----------
 
@@ -1689,7 +1693,7 @@ fig.add_vline(x=overall, line_color=MUTED, line_width=1, layer="below")
 fig.add_annotation(x=overall, y=1.0, yref="paper", yanchor="bottom", xanchor="left", xshift=4, showarrow=False,
                    text=f"All contacts {overall:.1%}", font=dict(color=MUTED, size=12))
 n_bars = " / ".join(f"{int(v):,}" for v in gap.contacts.dropna())
-style(fig, f"Complaint calls leave {q_rate:.1%} of contacts unresolved, {q_rate / t_rate:.1f}× the account/payment rate",
+style(fig, f"Complaint contacts: {q_rate:.1%} unresolved, {q_rate / t_rate:.1f}× the account/payment rate",
       f"Unresolved at first contact, % of each proxy reason's contacts · n = {n_bars} · line = all {int(pain.contacts.sum()):,}",
       height=340, horizontal=True)
 fig.update_yaxes(categoryorder="array", categoryarray=list(gap.workflow)[::-1], tickfont=dict(color=INK2, size=13))
@@ -1709,7 +1713,7 @@ display(pd.DataFrame({
 
 # MAGIC %md
 # MAGIC ### 5.4 · What is the baseline to beat?
-# MAGIC Complaint calls (`Queja`) are the contact-level proxy; dispute-type complaint cases (Transactions + Fees) give the case level.
+# MAGIC Complaint contacts (`Queja`) are the contact-level proxy; dispute-type complaint cases (Transactions + Fees) give the case level.
 # MAGIC First row: contacts. Second row: cases. Both are computed live over the full history.
 
 # COMMAND ----------
@@ -1789,7 +1793,7 @@ tiles([
 # MAGIC | ES vs PT gap in completion and macro-F1 | **≤ 5 pp** | New capability (no Portuguese today) |
 # MAGIC
 # MAGIC **Deliberately not targeted:** recontact (random arrivals), escalation (a 10% coin flip), the SLA flag (random),
-# MAGIC CSAT on its own (a fixed function of FCR) and money at stake (claimed amounts are random).
+# MAGIC CSAT on its own (tied to FCR) and money at stake (claimed amounts are random).
 
 # COMMAND ----------
 
@@ -1801,7 +1805,7 @@ tiles([
 # COMMAND ----------
 
 FLOW_STEPS = [  # (title, detail, kind)
-    ("Authenticate", "Document type + number + a second factor. Never email: 54.4% of customers share one.", "Tool"),
+    ("Authenticate", "Document type + number + a second factor. Never email: 54.4% of customers with one share it.", "Tool"),
     ("List own products &amp; recent transactions", "From Silver, on event time. Typically 1 candidate in 30 days (p90 2).", "Tool"),
     ("Customer confirms the movement", "Amount and currency come from the transaction, never from the claim.", "Customer"),
     ("Classify dispute type", "Unrecognized charge vs incorrect charge or fee, in Spanish or Portuguese.", "Model"),
@@ -1861,18 +1865,18 @@ displayHTML(f"""
 
 # MAGIC %md
 # MAGIC ### 5.7 · Learned component: a Spanish/Portuguese intake intent classifier
-# MAGIC **No historical label in the dataset carries learnable signal**, so the labels are produced by construction and the model must beat two simple baselines.
+# MAGIC **Every historical label we tested is noise or a copy of another field**, so the labels are produced by construction and the model must beat two simple baselines.
 # MAGIC Negative controls kept on file: `is_fraud` temporal AUC 0.504 and 0.4997 · `dpd > 90` AUC 0.504 against credit score · FCR by agent equals binomial noise ·
-# MAGIC CSAT is a fixed function of `was_resolved` · the SLA flag is flat at 18.5–21.4% · complaint descriptions copy the category.
+# MAGIC CSAT depends only on `was_resolved` · the SLA flag is flat at 18.5–21.4% · complaint descriptions copy the category.
 # MAGIC
 # MAGIC | Plan element | Choice |
 # MAGIC |---|---|
 # MAGIC | **Task** | Intent classes `dispute_unrecognized_charge`, `dispute_incorrect_charge_or_fee`, `account_payment_inquiry`, `card_lost_or_block`, `other_complaint`, `out_of_scope`. Slots (amount, currency, relative date, merchant hint) by rules first. |
 # MAGIC | **Labels, valid by construction** | A scenario generator samples a real customer, product and transaction from Silver (event time) and records the gold intent, dispute type, transaction, amount, currency and date. ES and PT messages come from paraphrase families with controlled noise: rounded amounts, relative dates ("el martes pasado" / "na terça passada"), 1.234,56 vs 1,234.56, partial merchant names. |
-# MAGIC | **Final test** | A hand-written holdout, at least 100 messages per language, written by both team members before training. |
+# MAGIC | **Final test** | The independent holdout in `eval/holdout/`: 300 free-form messages (150 per language) produced by a generation process separate from the scenario generator; no person wrote them. The plan also calls for at least 100 hand-written messages per language by both team members, reported separately; none exist yet. |
 # MAGIC | **Baselines** | (a) majority class; (b) keyword/regex router written from a glossary before the test set is seen. Transaction resolution stays a deterministic tool (amount ±1%, date ±2 days, then customer confirmation), reported as top-1 accuracy. |
 # MAGIC | **Candidate model** | Character n-gram TF-IDF + logistic regression (optionally sentence embeddings + logistic regression). Calibrated probabilities drive an abstain-and-handoff threshold. |
-# MAGIC | **Splits** | (1) group split by paraphrase family and `customer_id`; (2) temporal on the anchor transaction's event time, train before 2025-07-01; (3) train on ES only, test on PT; (4) the hand-written holdout. |
+# MAGIC | **Splits** | (1) group split by paraphrase family and `customer_id`; (2) temporal on the anchor transaction's event time, train before 2025-07-01; (3) train on ES only, test on PT; (4) the independent holdout, plus the hand-written messages once they exist. |
 # MAGIC | **Metrics** | Macro-F1 per language, recall on the two dispute classes, out-of-scope false-accept rate, abstention rate, slot exact-match, top-1 transaction resolution; 95% bootstrap intervals against both baselines on the same test sets. |
 
 # COMMAND ----------
@@ -1889,18 +1893,18 @@ displayHTML(f"""
 # MAGIC - **Train/test overlap:** shared templates or paraphrase families, verbatim `transaction_id` or amount strings in the text, the same generator seed on both sides.
 # MAGIC
 # MAGIC ### 5.9 · Limitations
-# MAGIC - **Synthetic-data artifacts:** uniform categories, scores and timings; FCR driven only by reason; deterministic satisfaction; random cross-table links; flat demand. The data sizes the problem, sets baselines and grounds the flow; it supports no causal claims about banking behavior.
+# MAGIC - **Synthetic-data artifacts:** uniform categories, scores and timings; FCR driven only by reason; satisfaction set by resolution; random cross-table links; flat demand. The data sizes the problem, sets baselines and grounds the flow; it supports no causal claims about banking behavior.
 # MAGIC - **Spanish only:** all historical text is Spanish; Portuguese evaluation data is team-generated, labeled as such and reported separately.
 # MAGIC - **Bronze-level numbers:** raw and pre-dedup. With 0 duplicates found, Silver should reproduce them except for the fields its rules recompute.
 # MAGIC - **Sample and cost:** interactions look like a sample, so savings are stated as rates, not FTE; handle time exists only for voice and video (590,062 of 686,296 contacts).
 # MAGIC - **Assumptions:** the Queja-to-dispute mapping cannot be verified (calls do not link to cases); historical baselines and scenario targets measure different populations.
-# MAGIC - **Open questions:** the timezone of event timestamps; `digital_events` is not loaded; the announced ~2% duplicates were not found under any natural key.
+# MAGIC - **Open questions:** the timezone of event timestamps; `digital_events` is not loaded; the announced ~2% duplicates were not found under the 6 natural keys tested.
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ## Next steps
 # MAGIC 1. **Build Silver** with the rules in section 4 (FIX, FLAG, QUARANTINE, DROP) and hard expectations: 0 duplicates on natural keys, 0 orphans on the documented keys, event time instead of `process_date`.
-# MAGIC 2. **Scenario generator:** sample real customers, products and transactions from Silver and render ES/PT messages with gold labels; write the hand-made holdout first.
+# MAGIC 2. **Scenario generator:** sample real customers, products and transactions from Silver and render ES/PT messages with gold labels; keep the independent holdout (`eval/holdout/`) apart from it and add the hand-written messages before training.
 # MAGIC 3. **Intent classifier + baselines:** majority class and keyword router first, then the TF-IDF model, on the group, temporal and ES→PT splits with bootstrap intervals.
 # MAGIC 4. **Agent tools:** authenticate, list products and transactions, explain decline codes, create the case (mocked write) and hand off with a reason code; then score the scenario set against the targets above.

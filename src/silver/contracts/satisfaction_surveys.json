@@ -2,7 +2,7 @@
   "table": "satisfaction_surveys",
   "source": "satisfaction_surveys",
   "kind": "fact",
-  "description": "Post-contact satisfaction surveys (CSAT, NPS, CES), one row per survey, covering 31.0% of interactions. Typed, normalized and checked from workspace.bronze.satisfaction_surveys. Scales are truncated (CSAT/CES 1-4, NPS 2-7; issue 17) and scores are a fixed function of was_resolved (issue 16): report relative KPIs only and never use scores as labels or features.",
+  "description": "Post-contact satisfaction surveys (CSAT, NPS, CES), one row per survey, covering 31.0% of interactions. Typed, normalized and checked from workspace.bronze.satisfaction_surveys. Scales are truncated (CSAT/CES 1-4, NPS 2-7; issue 17) and scores are drawn from a range set by was_resolved (issue 16: CSAT and CES 2-4 when resolved, 1-3 when not; NPS 5-7 vs 2-4): report relative KPIs only and never use scores as labels or features.",
   "primary_key": ["survey_id"],
   "natural_key": ["interaction_id", "survey_type"],
   "event_time": "event_ts",

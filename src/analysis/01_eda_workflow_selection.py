@@ -1,7 +1,8 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # 01 · EDA and workflow selection
-# MAGIC Read-only queries behind `docs/02_eda_workflow_selection.md`. Every figure in that report can be reproduced here.
+# MAGIC Read-only queries behind `docs/02_eda_workflow_selection.md`. Every figure in that report can be reproduced here or in the
+# MAGIC visual notebook (`02_eda_visual_report.py`), except the figures the report marks with †.
 # MAGIC
 # MAGIC - **Source:** `workspace.bronze.*` (raw, pre-dedup, full data). Every business column is a string, so values are cast
 # MAGIC   with `try_cast` and booleans are compared with `= 'True'`.
@@ -113,7 +114,7 @@
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC **Q2.3.** Are survey scores a fixed function of `was_resolved`? (score distribution per survey type and resolution)
+# MAGIC **Q2.3.** Do survey scores depend only on `was_resolved`? (score distribution per survey type and resolution)
 
 # COMMAND ----------
 
@@ -1000,12 +1001,12 @@
 # MAGIC
 # MAGIC | Candidate label | Evidence | Cell |
 # MAGIC |---|---|---|
-# MAGIC | `is_fraud` | temporal test AUC 0.504; fraud rate flat on every dimension | Q4.3, Q4.4, Q4.5 |
+# MAGIC | `is_fraud` | temporal test AUC 0.504; fraud rate flat on every dimension tested | Q4.3, Q4.4, Q4.5 |
 # MAGIC | `fraud_score` as feature | precision 1.000 above 30: built from the label | Q4.6, Q4.7 |
 # MAGIC | `days_past_due > 90` | AUC 0.504 against credit score; flat by segment and country | Q5.5, Q5.6 |
 # MAGIC | FCR per agent | dispersion equals binomial noise | Q2.5 |
-# MAGIC | CSAT / NPS / CES | fixed function of `was_resolved` | Q2.3 |
-# MAGIC | Complaint `sla_breached` | flat 18.5-21.4% across every driver | Q3.7 |
+# MAGIC | CSAT / NPS / CES | depend only on `was_resolved` (same score split shifted by one point; NPS ranges do not overlap) | Q2.3 |
+# MAGIC | Complaint `sla_breached` | flat 18.5-21.4% across priority, resolution time and first response | Q3.7 |
 # MAGIC | Complaint `description`, transcript `main_topics` | copies of category / reason | Q3.9, Q6.6 |
 # MAGIC
 # MAGIC The learned component therefore uses ES/PT intake messages with labels valid by construction (see section 10 of the report).

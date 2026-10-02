@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "note": "Team-written ES/PT text for get_policy_info. Placeholders {policy:<path>} are filled from src/policy/dispute_policy.json at request time, so values never drift from the policy. Filters: |list (localized list joined with y/e), |label (one localized value), |minutes (seconds / 60). Internal paths (handoff thresholds and calibration, priority amounts, matching tolerances, confidence, clarification and retry limits, trigger order, must_not vocabulary) must never appear here; the service refuses to load a file that references them.",
+  "note": "ES/PT text for get_policy_info, generated for the project by an automated authoring process (not hand-written). Placeholders {policy:<path>} are filled from src/policy/dispute_policy.json at request time, so values never drift from the policy. Filters: |list (localized list joined with y/e), |label (one localized value), |minutes (seconds / 60). Internal paths (handoff thresholds and calibration, priority amounts, matching tolerances, confidence, clarification and retry limits, trigger order, must_not vocabulary) must never appear here; the service refuses to load a file that references them.",
   "labels": {
     "es": {
       "Approved": "aprobados",

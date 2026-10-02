@@ -8,7 +8,7 @@
   "event_time": "event_ts",
   "load": {
     "cadence": "daily",
-    "notes": "One file per business day (process_date). Clustered by customer and event date for the intake lookups (a customer's recent movements); partitioning by process_date would give 1,097 partitions of ~4k rows. customers and products are joined from Bronze (broadcast) for the derived flags.",
+    "notes": "One file per calendar day (process_date, weekends included). Clustered by customer and event date for the intake lookups (a customer's recent movements); partitioning by process_date would give 1,097 partitions of ~4k rows. customers and products are joined from Bronze (broadcast) for the derived flags.",
     "partition_by": [],
     "cluster_by": ["customer_id", "event_date"],
     "max_quarantine_rate": 0.01
@@ -38,7 +38,7 @@
     "currency": {"type": "string", "nullable": false, "source": "currency", "allowed": ["USD", "COP", "ARS"], "rule_ref": 11,
       "description": "ISO currency of amount. Mexican customers transact in USD only (issue 11); MXN never appears here."},
     "amount_usd": {"type": "decimal(18,2)", "nullable": false, "rule_ref": 12,
-      "description": "FIX: USD equivalent at the source's fixed rates (ARS/350, COP/4000, USD 1:1), rounded half-even to cents. The delivered value when present, otherwise computed the same way. Internal analytics only; customer-facing conversions use daily_exchange_rates and say so."},
+      "description": "FIX: USD equivalent at the source's fixed rates (ARS/350, COP/4000, USD 1:1), rounded half-even to cents. The delivered value when present, otherwise computed the same way. Internal only (policy thresholds and priority); a customer-facing conversion, if one is ever added, must use daily_exchange_rates and say so (none exists today)."},
     "amount_usd_raw": {"type": "decimal(18,2)", "nullable": true, "source": "amount_usd", "rule_ref": 12,
       "description": "USD equivalent as delivered: NULL for every USD row and for 5.0% of ARS/COP rows."},
     "amount_usd_imputed": {"type": "boolean", "nullable": false, "rule_ref": 12,

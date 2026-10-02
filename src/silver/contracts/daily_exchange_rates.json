@@ -2,7 +2,7 @@
   "table": "daily_exchange_rates",
   "source": "daily_exchange_rates",
   "kind": "dimension",
-  "description": "Daily FX reference rates between USD, MXN, COP and ARS, one row per date and ordered currency pair (rate = target units per source unit). For customer-facing conversions only, labeled as such; transactions.amount_usd uses the source's fixed rates instead (issue 12). Typed and checked from workspace.bronze.daily_exchange_rates.",
+  "description": "Daily FX reference rates between USD, MXN, COP and ARS, one row per date and ordered currency pair (rate = target units per source unit). Reserved for customer-facing conversions, labeled as such (no tool converts amounts yet); transactions.amount_usd uses the source's fixed rates instead (issue 12). Typed and checked from workspace.bronze.daily_exchange_rates.",
   "primary_key": ["date", "source_currency", "target_currency"],
   "natural_key": ["date", "source_currency", "target_currency"],
   "event_time": "date",

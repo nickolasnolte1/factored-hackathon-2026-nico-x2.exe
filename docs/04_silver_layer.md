@@ -7,7 +7,7 @@ _Built on 2026-09-30 from the 12 Bronze tables (source prefix `data/`). Every fi
 - **12 of 12 tables built** in `workspace.silver`: 7,874,194 rows, equal to Bronze. 0 rows quarantined, 0 duplicates removed, 0 cast failures, 0 rescued rows.
 - **Reconciled:** for every table, Bronze rows = Silver rows + quarantined rows + natural-key duplicates removed (7,874,194 = 7,874,194 + 0 + 0). Primary keys are unique and non-null in all 12 tables. All 23 declared foreign keys have 0 orphans. The two broken branch keys reach 0 because their orphan values are nulled and flagged, with the raw value kept.
 - **All 22 data-quality issues from the EDA** ([02](02_eda_workflow_selection.md), section 6) are implemented as a column, flag or check, or documented as a feature-layer rule (section 3).
-- **616 checks per full run:** 63 hard (all pass), 552 warn, 1 flag. The 42 warn checks that fail are the known issues, counted row by row in `ops.dq_results`.
+- **616 checks per full run:** 63 hard (all pass), 552 warn, 1 flag. The 42 warn checks that fail are counted row by row in `ops.dq_results`: 26 implement an EDA issue and 16 are checks added while building Silver (`rule_ref` null; listed in section 3).
 - **Incremental and idempotent:** a second run inserts 0 and updates 0 rows in every table. So does a replay of all of Bronze through the MERGE. Update correctness (new, late, updated, duplicate, uncastable and schema-evolved rows) is proven on a labeled test fixture: 35 of 35 assertions pass.
 
 ## 1. What Silver does
@@ -17,7 +17,7 @@ Silver turns each Bronze table (all columns are strings, plus lineage) into a ty
 | File | Role |
 |---|---|
 | `src/silver/sql/<table>.sql` | One `SELECT` over Bronze. It casts, trims and normalizes every column, derives the corrected columns and flags, de-duplicates on the natural key and keeps lineage |
-| `src/silver/contracts/<table>.json` | Keys, column types, nullability, domains and ranges, foreign keys and named checks, each tied to its EDA issue (`rule_ref`) |
+| `src/silver/contracts/<table>.json` | Keys, column types, nullability, domains and ranges, foreign keys and named checks, tied to their EDA issue (`rule_ref`) when they implement one |
 
 One shared engine, `silver_lib.py`, handles every table the same way:
 
@@ -33,7 +33,7 @@ One shared engine, `silver_lib.py`, handles every table the same way:
 
 The rule vocabulary is the one from the EDA:
 
-- **FIX:** a corrected column, with the raw value kept in `<column>_raw`.
+- **FIX:** a corrected column. The delivered value stays next to it: in the untouched source column when the fix is a new column (e.g. `transaction_country` next to `transaction_country_code`), or in `<column>_raw` when the column keeps its name (imputed nulls are marked by a flag instead, e.g. `subcategory_imputed`).
 - **FLAG:** a boolean next to the untouched value.
 - **QUARANTINE (value):** the value is nulled and the raw copy kept, so it never joins.
 - **DROP:** the column is not carried into Silver.
@@ -75,16 +75,16 @@ The rule vocabulary is the one from the EDA:
 | 5 | Text reveals the label | FIX + feature rule | `complaints.subcategory` imputed from category, `subcategory_imputed`; `description` kept for display and marked label-leaking in the contract | 6,698 imputed (9.98%) |
 | 6 | Active cards past expiry | FIX | `products.effective_status` (`product_status` kept); check `active_not_expired` | Of the Active cards with an expiry date, 40,518 / 80,864 credit and 16,187 / 32,141 debit are `Expired` (as-of 2026-06-18; the EDA's 40,484 and 16,180 used 2026-06-17) |
 | 7 | Stale last-movement field | FIX | `products.last_transaction_date_recomputed`, `first_transaction_date`, `transaction_count`, `last_transaction_date_stale` | 339,538 flagged: 305,294 wrong dates, 34,242 missing, 2 without transactions |
-| 8 | Activity before opening or registration | FIX + FLAG | `products.effective_opening_date`, `activity_before_opening`, `opened_before_registration`; `transactions.activity_before_opening` / `activity_before_registration`; `campaign_sends.sent_before_registration` | 117,640 products; 827,610 / 829,540 transactions; 322,739 sends |
+| 8 | Activity before opening or registration | FIX + FLAG | `products.effective_opening_date`, `activity_before_opening`, `opened_before_registration`; `transactions.activity_before_opening` / `activity_before_registration`; `campaign_sends.sent_before_registration` | 117,640 products; 827,610 transactions before opening and 829,540 before registration (of 4,425,008); 322,739 sends |
 | 9 | Email is not an identity key | Contract | `customers.natural_key = (document_type, document_number)`, check `unique:natural_key`; `email` described as non-key | 0 duplicate documents; 79,930 of 147,016 customers with an email share it |
 | 10 | Product-number collisions | QUARANTINE value | `products.product_number` nulled for colliding rows, `product_number_raw`, `product_number_collision` | 12 products (6 pairs) excluded from number lookup |
 | 11 | Mexico in USD, document type `DNI` | FLAG | `customers.doc_type_inconsistent`; `products.currency_usd_for_mexico`; `transactions.currency` domain | 74,907 / 74,907 Mexican customers; 200,398 products |
-| 12 | `amount_usd` fixed-rate and partly missing | FIX | `transactions.amount_usd` (fixed rate), `amount_usd_raw`, `amount_usd_imputed`; checks `amount_usd_fixed_rate`, `amount_usd_delivered` | 99,477 / 1,987,029 ARS/COP rows filled, plus all 2,437,979 USD rows at 1:1 (never delivered), so `amount_usd_imputed` is true on 2,537,456 rows; 0 NULL `amount_usd`. Customer-facing conversions use `daily_exchange_rates` |
+| 12 | `amount_usd` fixed-rate and partly missing | FIX | `transactions.amount_usd` (fixed rate), `amount_usd_raw`, `amount_usd_imputed`; checks `amount_usd_fixed_rate`, `amount_usd_delivered` | 99,477 / 1,987,029 ARS/COP rows filled, plus all 2,437,979 USD rows at 1:1 (never delivered), so `amount_usd_imputed` is true on 2,537,456 rows; 0 NULL `amount_usd`. `amount_usd` is internal (policy thresholds and priority). Rule: a customer-facing conversion, if one is ever added, must use `daily_exchange_rates`; no tool converts amounts today |
 | 13 | Two spellings of Mexico | FIX | `*_country_code` in customers, branches, service_agents, marketing_campaigns, campaign_sends and transactions; `transactions.is_international` | 40,515 unaccented rows normalized; 202,800 international (no false positives from the 18,412 Mexican-customer rows) |
 | 14 | Branch foreign keys broken | QUARANTINE value + hard FKs | `customers.registration_branch_id` / `service_agents.assigned_branch_id` nulled when orphan, `*_raw` kept, `*_orphan` flags; 23 FK checks | 149,995 / 150,000 and 831 / 833 nulled; 0 orphans on all 23 keys |
 | 15 | `mentioned_products` is random | DROP | Not selected in `call_center_interactions.sql` (nor `contact_reason`, a copy of `reason_category`) | Column absent from Silver |
-| 16 | Fields that copy the label | Feature rule | Kept for lineage, each described as "never a feature": `transactions.fraud_score`, `call_transcripts.main_topics` / `detected_intents`, `call_center_interactions.detected_sentiment` (check `sentiment_label_matches_score`), survey scores | Enforced where features are built ([02](02_eda_workflow_selection.md), section 10 leakage checklist); Silver does not drop them |
-| 17 | Truncated survey scales | FIX | `satisfaction_surveys.nps_category` recomputed from the score, `nps_category_raw`; scale checks | 3,274 / 63,668 missing categories filled; relative KPIs only |
+| 16 | Fields that copy the label | Feature rule | Kept for lineage, each described as "never a feature": `transactions.fraud_score`, `call_transcripts.main_topics` / `detected_intents`, `call_center_interactions.detected_sentiment` (check `sentiment_label_matches_score`), survey scores | To be enforced where features are built ([02](02_eda_workflow_selection.md), section 10 leakage checklist); no model or feature pipeline exists yet, and Silver does not drop them |
+| 17 | Truncated survey scales | FIX | `satisfaction_surveys.nps_category` recomputed from the score, `nps_category_raw`; scale checks | 3,274 / 63,668 missing categories filled. Rule: relative KPIs only |
 | 18 | Implausible type × channel | FLAG | `transactions.implausible_type_channel`; check `type_channel_plausible` | 1,240,000 / 4,425,008 (28.0%) |
 | 19 | `process_date` is a business-day cut-off | FIX | `event_ts` / `event_date` in all six fact tables; `process_date` kept as the business date; cut-off checks | 1,106,307 transactions and 228,318 interactions carry the previous day; 0 a later day |
 | 20 | Customer status conflicts with products | FLAG | `products.customer_status_conflict`; check `customer_status_consistent` | 6,721 Active products of 2,694 Closed customers; precedence rule (Closed/Suspended → human) lives in the agent policy |
@@ -99,6 +99,9 @@ The rule vocabulary is the one from the EDA:
 - **`employee_code` collisions:** 26 agents. Flagged.
 - **Engagement tracking by channel in campaign_sends:** the `engagement_tracked` denominator.
 - **Sends outside the campaign window:** 8,277. Flagged.
+- **Other checks added while building that fail on some rows** (warn, counted in `ops.dq_results`): `accent_confidence` without an accent on 56,776 transcripts; `last_updated` after the as-of date on 9,258 customers and 24,996 products; 3,828 customers registered before age 18 (`adult_at_registration`); 1,203 credit cards with a balance above their limit (`card_balance_within_limit`); 10 campaigns whose promoted product was filled from the campaign code; 3 Completed campaigns that end after the as-of date.
+
+With the coordinate, postal-code and phone-prefix checks above, these are the 16 failing warn checks that are not tied to an EDA issue (`rule_ref` null).
 
 ## 4. Data-quality checks and quarantine
 
@@ -119,7 +122,7 @@ The rule vocabulary is the one from the EDA:
 | `_silver_processed_at`, `_run_id` | Silver | Run that wrote this version of the row (joins `ops.pipeline_runs.run_id`, the job run id) |
 | `_dq_warnings` | Silver, quarantine | Warn checks the row failed |
 | `_dq_reasons`, `_raw_json`, `_quarantined_at` | Quarantine | Hard checks failed, the raw Bronze row, and when |
-| `<column>_raw` | Silver | Delivered value next to every FIX or QUARANTINE-value column |
+| `<column>_raw` | Silver | Delivered value next to every QUARANTINE-value column and every FIX column that keeps its source name (except the imputed `subcategory`, marked by `subcategory_imputed`). A FIX in a new column (e.g. `transaction_country_code`) keeps the delivered value in the source column instead |
 
 ## 6. Incremental loads: watermark and MERGE
 
@@ -137,7 +140,7 @@ The rule vocabulary is the one from the EDA:
 
 ## 7. Freshness policy
 
-- **Cadence: daily batch.** The source delivers one file per business day for every fact table and a snapshot per dimension. `build_silver` runs after `ingest_bronze`, as a separate job. The target is Silver `max(_ingested_at)` = Bronze `max(_ingested_at)` after each run, visible in `ops.freshness`.
+- **Cadence: daily batch.** The source has one file per calendar day (`process_date`, weekends included) for every fact table and a snapshot per dimension; all of them landed at once on 2026-09-26. Run `build_silver` after `ingest_bronze`: they are separate jobs and nothing chains them (both are defined in `databricks.yml` and neither is deployed yet, section 10). The target is Silver `max(_ingested_at)` = Bronze `max(_ingested_at)` after each run, visible in `ops.freshness`.
 - **Event time vs business date.**
   - Every time-based answer, filter and split uses `event_ts` / `event_date`.
   - `process_date` is the business day with a cut-off: 06:00 for transactions and campaign sends, 08:00 for contacts. 25.0% of transactions and 33.3% of contacts carry the previous day. Surveys carry the business day of their interaction.
@@ -170,7 +173,7 @@ The delivered data is a static snapshot: after the first load, incremental runs 
 | Batch 1, `full` | 300 rows + 1 identical copy of one of them in a second file | 301 read, 1 removed by natural-key dedup, 300 inserted, watermark = batch 1 |
 | Batch 2, `incremental` | 200 new rows; 1 late row (event 2024-01-15, new `_ingested_at`); 1 updated version (Pending → Approved); 1 identical copy of a batch-1 row; 1 amount `'12,50 EUR'`; 1 row with a new Bronze column `loyalty_points` (appended with `mergeSchema`, as Auto Loader's `addNewColumns` does) | Automatic watermark from the fixture log. 205 read, 1 quarantined (`amount_positive`; the raw amount is kept in `_raw_json`). 202 inserted, 1 updated with batch-2 lineage. The copy is unchanged and keeps batch-1 lineage. The late row keeps its 2024 event date. The Silver schema is unchanged by the new column |
 | Rerun | nothing new | 0 read, 0 inserted, 0 updated, watermark unchanged |
-| Replay (`watermark_override = 1900-01-01`) | whole fixture history | 506 read; 3 superseded copies de-duplicated; 0 inserted, 0 updated, 0 rows rewritten |
+| Replay (`watermark_override = 1900-01-01`) | whole fixture history | 506 read; 3 superseded copies de-duplicated; 0 inserted, 0 updated, 0 rows rewritten; the bad row is logged again in the quarantine (append log) |
 | Batch 3, `incremental` | 1 valid + 1 uncastable row (50% > the 1% gate) | Run fails with `QualityGateError`; nothing written (not even the valid row); watermark stays at batch 2 |
 
 Last run: job run `423425889197422`, 35 of 35 assertions passed in 170 s. The fixture tables are kept for inspection. Set the `cleanup` widget to `true` to drop them.
@@ -189,7 +192,7 @@ The runner prints a summary table and displays the failed checks and freshness. 
 
 ## 10. How to run
 
-**Bundle.** The `build_silver` job has two tasks: `silver_build`, then `update_fixture_test` (which runs even if the build fails).
+**Bundle.** The `build_silver` job has two tasks: `silver_build`, then `update_fixture_test` (which runs even if the build fails). It is defined in `databricks.yml` but not deployed yet; the runs in section 11 were one-off `jobs submit` runs of the same notebooks.
 
 ```bash
 databricks bundle validate --profile factored
@@ -218,7 +221,7 @@ databricks jobs submit --no-wait --profile factored --json '{"run_name": "silver
 
 ## 11. Results
 
-**Build runs** (serverless, 2026-09-30):
+**Build runs** (serverless, 2026-09-30; one-off `jobs submit` runs, not the bundle job):
 
 | Run | Job run id | Wall-clock | Result |
 |---|---|---|---|
@@ -228,7 +231,7 @@ databricks jobs submit --no-wait --profile factored --json '{"run_name": "silver
 | Fixture test | `423425889197422` | 170 s | 35 / 35 assertions |
 | Framework self-test (`tests/test_silver_framework.py`) after the library changes | `890280484353900` | 161 s | 20 / 20 assertions |
 
-**Tables** (full run). "Checks" counts hard / warn / flag. "Rows without warnings" is low where a known issue flags nearly every row: complaints (every case is unlinked), customers (branch orphans), products (stale last movement).
+**Tables** (full run). "Checks" counts hard / warn / flag. "Rows without warnings" is low where known issues flag most rows: complaints (every case is unlinked), customers (149,995 of 150,000 branch orphans), products (stale last movement on 84.9%, plus the Mexico-in-USD and timeline flags).
 
 | Table | Bronze rows | Silver rows | Quarantined | Dedup removed | Checks | Hard passed | Warn checks failing | Rows without warnings |
 |---|---|---|---|---|---|---|---|---|
@@ -246,7 +249,7 @@ databricks jobs submit --no-wait --profile factored --json '{"run_name": "silver
 | transactions | 4,425,008 | 4,425,008 | 0 | 0 | 9 / 57 / 0 | 9 / 9 | 7 | 42.2% |
 | **Total** | **7,874,194** | **7,874,194** | **0** | **0** | **63 / 552 / 1** | **63 / 63** | **42** | |
 
-**Integrity** (independent SQL on the built tables):
+**Integrity** (separate read-only SQL on the built tables, outside the pipeline's own checks):
 
 - **Primary keys:** 0 duplicate and 0 NULL primary keys in all 12 tables.
 - **Foreign keys:** 0 orphans on all 23 foreign keys.
@@ -254,9 +257,10 @@ databricks jobs submit --no-wait --profile factored --json '{"run_name": "silver
 
 ## 12. Known limitations
 
-- **`digital_events` is not loaded** (out of scope for the dispute workflow), so there is no Silver table for it. Card and app events and any fraud signal they carry remain unexamined.
-- **Synthetic-data artifacts are flagged, not repaired.** Some flags fire on nearly every row because the generator draws fields independently:
-  - `link_status`, `doc_type_inconsistent`, `currency_usd_for_mexico` and the branch orphans;
+- **`digital_events` is not loaded** (deferred at Bronze ingestion; no documented reason), so there is no Silver table for it. Card and app events and any fraud signal they carry remain unexamined, so whether disputes need them is unknown.
+- **Synthetic-data artifacts are flagged, not repaired.** Some flags fire on many rows:
+  - `link_status` (every case) and the registration-branch orphans (149,995 of 150,000);
+  - `doc_type_inconsistent` and `currency_usd_for_mexico` (every Mexican customer and product, about half of each table);
   - the 28% of implausible type × channel pairs;
   - templated transcripts;
   - label-derived fields (`fraud_score`, `main_topics`, survey scores).

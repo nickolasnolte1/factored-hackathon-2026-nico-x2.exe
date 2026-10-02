@@ -1,6 +1,6 @@
 # Scenario generator (ES / PT)
 
-Builds the two team-generated datasets of the dispute-intake workflow from real Silver anchors:
+Builds the two project-generated datasets of the dispute-intake workflow from real Silver anchors:
 
 - **Intent dataset.** Labeled customer messages for the intake classifier and the slot extractor (report [02](../../docs/02_eda_workflow_selection.md), section 10).
 - **End-to-end scenarios.** Scripted multi-turn conversations with the agent's expected outcome.
@@ -42,17 +42,17 @@ Re-extracting with pinned versions reproduces `anchors.jsonl` and `panel.jsonl` 
 
 | Path | Role |
 |---|---|
-| `families/{es,pt}.json` | Paraphrase families: 84 per language, 5–8 templates each. Written by the team; the generator reads them unchanged |
+| `families/{es,pt}.json` | Paraphrase families: 84 per language, 6 or 7 templates each. Generated for the project by an automated authoring process (not hand-written by a team member); the generator reads them unchanged |
 | `anchors.sql` | Read-only sampling of `workspace.silver` (anchors, e2e panel, threshold calibration) |
 | `extract_anchors.py` | Runs `anchors.sql` through the Databricks CLI, pins Delta versions, writes `anchors.jsonl`, `panel.jsonl`, `silver_snapshot.json` |
 | `anchor_specs.py` | Which kind of anchor each family needs (for example ATM families need an ATM withdrawal) |
 | `render.py` | Locale rendering (amounts, dates, merchants, products, channels) and text noise |
 | `generate.py` | Intent dataset, splits, leak checks, manifest |
-| `e2e.py`, `e2e_phrases.json` | End-to-end scenarios. Scripted turns are team-written and independent of the families |
+| `e2e.py`, `e2e_phrases.json` | End-to-end scenarios. Scripted turns come from a separate generated phrase bank (automated authoring, not hand-written), not from the families |
 | `splits.py` | Customer hash buckets and the temporal cut-off, shared with the SQL |
 | `validate.py` | Twelve leakage and hygiene checks, including overlap with the independent holdout; exit code 1 on failure |
 | `build.py` | One-command rebuild |
-| [`../policy/dispute_policy.json`](../policy/dispute_policy.json), [`dispute_policy.py`](../policy/dispute_policy.py) | Synthetic team policy and its reference implementation. The expected outcome of every e2e scenario comes from it |
+| [`../policy/dispute_policy.json`](../policy/dispute_policy.json), [`dispute_policy.py`](../policy/dispute_policy.py) | Synthetic project policy and its reference implementation. The expected outcome of every e2e scenario comes from it |
 
 ## Anchors (`anchors.sql`)
 
@@ -111,7 +111,7 @@ Each language has 3,000 train, 600 dev and 600 test rows, 8,400 in total. Rows g
 
 - `anchor.transaction_id` is set only when the text points at that movement. It is the gold for top-1 transaction resolution.
 - Product-only and no-slot rows keep the customer and product but have no transaction.
-- Complaint, out-of-scope and attack rows have no anchor.
+- Out-of-scope rows have no anchor, and neither do most complaint and attack rows. The exceptions are the prompt-injection disputes (`es-adv-03`, `pt-adv-02`) and the requests for the other party of a transfer or deposit, which is another customer's data (`es-adv-05`, `pt-adv-05`); these carry a transaction (218 rows), and `pt-ambig-07` (complaint first), which carries a product only (49 rows).
 
 **Clock:**
 
@@ -133,7 +133,7 @@ Each language has 3,000 train, 600 dev and 600 test rows, 8,400 in total. Rows g
 
 - Mexican customers transact in USD (issue 11), so es-MX amounts are in dollars.
 - PT rows are written as Brazilian customers of the bank and quote the anchor's own currency (USD, COP or ARS). BRL appears only in synthetic amounts without an anchor.
-- Fee claims anchor on `Adjustment` rows, the only bank-initiated movement type in Silver. Cards and accounts have no fee rows.
+- Fee claims anchor on `Adjustment` rows, which we treat as the bank-initiated fee movement (the data dictionary lists the type but does not define it). Adjustments exist only on loans, mortgages, investments and insurance, so cards and accounts have no fee rows.
 - Families that name a kind of shop only take merchants that fit: returns and cancelled orders use stores, undelivered orders stores and the restaurant, instalment plans stores and the clinic, card skimming in-person merchants on a card terminal (`POS`), exchange-rate claims international purchases.
 
 ## End-to-end scenarios (`e2e_scenarios.jsonl`)
@@ -178,12 +178,12 @@ There are 280 scenarios: 140 ES and 140 PT, split 140 dev and 140 test. Each lan
 
 ## Policy (synthetic)
 
-`src/policy/dispute_policy.json` is a clearly labeled synthetic team policy, not a real bank policy:
+`src/policy/dispute_policy.json` is a clearly labeled synthetic policy prepared for the prototype (not hand-written by a team member), not a real bank policy:
 
 - **Authentication.** Document type and number plus an OTP. A customer number never authenticates. Sessions last 15 minutes.
 - **Dispute window.** 90 days.
 - **Matching.** Amount within ±1%, date within ±2 days, and the customer must confirm.
-- **Handoff triggers.** Evaluated in a fixed order, each with a reason code.
+- **Handoff triggers.** Evaluated in a fixed order, each with a reason code. The reference flow `expected_outcome` departs from the written policy in three paths that no stored scenario takes (every card-block request is handed off, an attack for another customer's data or by social engineering is refused even with a real dispute in the same message, and an explicit request for a person is checked before a restricted customer status); see report 03, section 7.
 - **Priority.** Rule-based.
 - **Decline codes.** Explained from a code table. A card-only code on an account movement takes the insufficient-data path.
 
@@ -207,7 +207,7 @@ It holds no timestamps of its own, so a rebuild with the same inputs is identica
 
 ## Known limitations
 
-- Messages are template paraphrases with rule-based noise; the independent holdout in `eval/holdout/` measures generalization beyond them, and is never read by this code.
+- Messages are template paraphrases with rule-based noise; the independent holdout in `eval/holdout/` is meant to measure generalization beyond them. The generator never reads it; only `validate.py` does, for the overlap check, and 14 generator texts that collided with it were rewritten (report 03, section 5).
 - Dev has one adversarial family per language, so its adversarial rows cover a single attack type (another customer's data). Test covers all three.
 - Fee amounts come from Silver `Adjustment` rows, which run from about 10 to 1,000 USD, so some fee claims are far larger than a real ATM or annual fee.
 - Balances are the Silver snapshot as of 2026-06-18, not the balance at the scenario's `now`; `answer_facts` says so.

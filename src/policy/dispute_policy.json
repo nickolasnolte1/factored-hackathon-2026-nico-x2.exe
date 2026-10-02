@@ -2,7 +2,7 @@
   "policy_id": "team-dispute-intake",
   "version": "1.0.0",
   "synthetic": true,
-  "disclaimer": "SYNTHETIC TEAM POLICY for the hackathon prototype. It is not the policy of any real bank and has no legal or regulatory standing. Values are team choices, calibrated on the synthetic Silver data where stated.",
+  "disclaimer": "SYNTHETIC PROJECT POLICY for the hackathon prototype, prepared by an automated authoring process (not hand-written by a team member). It is not the policy of any real bank and has no legal or regulatory standing. Values are prototype choices, calibrated on the synthetic Silver data where stated.",
   "as_of_date": "2026-06-18",
   "scope": {
     "in_scope_intents": ["dispute_unrecognized_charge", "dispute_incorrect_charge_or_fee", "account_payment_inquiry", "card_lost_or_block"],

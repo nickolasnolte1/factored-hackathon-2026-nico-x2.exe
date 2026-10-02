@@ -39,7 +39,7 @@ $DBX jobs submit --no-wait --json '{"run_name": "silver", "tasks": [{"task_key":
 - Watermark = `watermark_out` of the table's last succeeded run in `ops.pipeline_runs` (the max `_ingested_at` it processed). The upper bound is pinned when the run starts, so rows landing mid-run wait for the next run. `watermark_override` replays a window (e.g. `1900-01-01` re-merges all of Bronze).
 - Deletes are not propagated: Bronze is append-only, so a key dropped from a newer snapshot stays in Silver. A dimension that needs this would filter its SQL to the latest `_source_file`.
 - A failing table is logged (`status = 'failed'`, `error`) and the others still run; the notebook raises at the end so the job fails. Serverless retries a failed task once, and the retry logs rows under the same `run_id` (the job run id); `started_at` tells them apart.
-- Run Silver after `ingest_bronze`. The bundle job `build_silver` (`databricks.yml`) runs this notebook with the job parameters `tables` and `mode` (`databricks bundle run build_silver --params tables=all,mode=full`), then `02_update_fixture_test.py`.
+- Run Silver after `ingest_bronze` (separate jobs; nothing chains them). The bundle job `build_silver` (defined in `databricks.yml`, not deployed yet) runs this notebook with the job parameters `tables` and `mode` (`databricks bundle run build_silver --params tables=all,mode=full`), then `02_update_fixture_test.py`.
 
 ## Adding a table
 
@@ -83,7 +83,7 @@ FROM src
   - timestamps `yyyy-MM-dd HH:mm:ss`: `try_cast(trim(x) AS TIMESTAMP)`; dates: `try_cast(trim(x) AS DATE)`.
   - money: `try_cast(trim(x) AS DECIMAL(18,2))`.
   - accents (issue 13): `translate(lower(trim(x)), 'áéíóú', 'aeiou')` before comparing.
-- FIX rules keep the raw value in a `<column>_raw` column; QUARANTINE-value rules null the column and keep `<column>_raw`; FLAG rules add a boolean (see `docs/02_eda_workflow_selection.md`, section 6).
+- FIX rules keep the delivered value: in the untouched source column when the fix is a new column (e.g. `transaction_country_code` next to `transaction_country`), else in a `<column>_raw` column; QUARANTINE-value rules null the column and keep `<column>_raw`; FLAG rules add a boolean (see `docs/02_eda_workflow_selection.md`, section 6).
 
 ## Contract format
 
