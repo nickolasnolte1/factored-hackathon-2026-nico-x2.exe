@@ -15,6 +15,8 @@ The customer-facing chat and the human agent console, built on the bank tool ser
 | Language | Spanish (with the register of the customer's country: tú / usted / vos) and Portuguese. The runtime detects the language of each message and tells the model. |
 | Grounding check | Case and ticket numbers in a reply must come from a tool result; any other id is flagged in the trace. |
 
+The interface borrows the bank branch turn system: every conversation gets a turn number (R-201, R-202, ...) shown on a call display, a rail tracks the four stages (identification, movement, confirmation, result), and a handoff is the customer's number being called to a specialist. The trace draws each turn as a timeline where model and tool calls take their share of the turn's duration. Fonts are self-hosted in `static/fonts/` (Atkinson Hyperlegible Next and Mono, Doto; SIL Open Font License).
+
 Demo-only controls, clearly labeled in the UI: the simulated phone that shows the one-time code, the test customers, and a button that moves the service clock 16 minutes forward to show the 15-minute session expiry.
 
 ## Run it locally

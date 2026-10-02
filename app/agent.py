@@ -82,6 +82,7 @@ class Conversation:
     language: str = "es"
     challenge_id: str = None
     country_code: str = None
+    label: str = ""
     trace: list = field(default_factory=list)
     verified_ids: set = field(default_factory=set)
     created_at: float = field(default_factory=time.time)
@@ -118,12 +119,14 @@ class Agent:
         self.tools = [{"type": "function", "function": {**t, "parameters": llm_schema(t["parameters"])}}
                       for t in service.model_tools(parameters_key="parameters")]
         self.conversations = {}
+        self._turn_seq = 200  # turn numbers, as a branch's ticket dispenser issues them: R-201, R-202, ...
 
     # -- conversations -------------------------------------------------------------------------------------------
     def new_conversation(self, language="es"):
         conv_id = "c-" + uuid.uuid4().hex[:16]
         nonce = secrets.token_hex(6)
-        conv = Conversation(id=conv_id, nonce=nonce, language=language,
+        self._turn_seq += 1
+        conv = Conversation(id=conv_id, nonce=nonce, language=language, label="R-" + str(self._turn_seq),
                             messages=[{"role": "system", "content": SYSTEM_PROMPT.replace("{nonce}", nonce)}])
         self.conversations[conv_id] = conv
         return conv
@@ -182,12 +185,13 @@ class Agent:
         return self._run(conv, turn)
 
     def _run(self, conv, turn):
-        events, model_calls = [], []
+        events, model_calls, timeline = [], [], []
         reply, fallback = None, None
         try:
             for _ in range(MAX_MODEL_CALLS):
                 res = self.llm.chat(conv.messages, self.tools)
                 model_calls.append({k: res[k] for k in ("latency_ms", "attempts", "usage", "endpoint")})
+                timeline.append({"kind": "model", "ms": res["latency_ms"]})
                 calls = res["tool_calls"]
                 conv.messages.append({"role": "assistant", "content": res["content"] or "",
                                       **({"tool_calls": calls} if calls else {})})
@@ -195,7 +199,10 @@ class Agent:
                     reply = res["content"].strip()
                     break
                 for call in calls:
-                    events.append(self._exec(conv, call, turn["trace_id"]))
+                    ev = self._exec(conv, call, turn["trace_id"])
+                    events.append(ev)
+                    timeline.append({"kind": "tool", "name": ev["tool"], "ms": ev["latency_ms"],
+                                     "ok": bool(ev["envelope"].get("ok"))})
             else:
                 fallback = "max_model_calls"
         except LLMError as exc:
@@ -207,6 +214,8 @@ class Agent:
             reply, ev = self._fallback(conv, turn["trace_id"], fallback or "empty_reply")
             if ev:
                 events.append(ev)
+                timeline.append({"kind": "tool", "name": ev["tool"], "ms": ev["latency_ms"],
+                                 "ok": bool(ev["envelope"].get("ok"))})
 
         # Case and ticket numbers in the reply must come from a tool result (a write only when verified).
         normalized = re.sub("[\u2010-\u2015\u2212]", "-", reply or "")  # models sometimes emit non-ASCII hyphens
@@ -214,7 +223,7 @@ class Agent:
         usage_in = sum(c["usage"].get("prompt_tokens", 0) for c in model_calls)
         usage_out = sum(c["usage"].get("completion_tokens", 0) for c in model_calls)
         turn.update({
-            "reply": reply, "events": events, "model_calls": model_calls, "fallback": fallback,
+            "reply": reply, "events": events, "model_calls": model_calls, "timeline": timeline, "fallback": fallback,
             "unverified_ids_in_reply": unverified,
             "latency_ms": int((time.time() - turn.pop("started")) * 1000),
             "tokens": {"prompt": usage_in, "completion": usage_out},
@@ -238,8 +247,12 @@ class Agent:
             result = self.service.call_tool(name, args, conv.session_token, self._ctx(conv, "model", trace_id))
             envelope = result.for_model()
         latency = int((time.monotonic() - started) * 1000)
+        for_model = envelope
+        note = display_note(name, envelope)
+        if note:  # runtime guidance next to the data it concerns; the envelope itself is unchanged
+            for_model = {**envelope, "app_display": note}
         conv.messages.append({"role": "tool", "tool_call_id": call.get("id"),
-                              "content": json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))})
+                              "content": json.dumps(for_model, ensure_ascii=False, separators=(",", ":"))})
         data = envelope.get("data") or {}
         if envelope.get("ok") and (name not in ("create_dispute_case", "handoff_to_human") or data.get("verified")):
             conv.verified_ids.update(m.group(0) for m in ID_IN_TEXT.finditer(json.dumps(data)))
@@ -271,6 +284,20 @@ class Agent:
             msg += ("Ya pasé tu conversación a un especialista (ticket " + ticket + ").") if ticket else \
                 "Por favor, intenta de nuevo en unos minutos."
         return msg, ev
+
+
+def display_note(name, envelope):
+    """What the app already shows the customer from this result, so the reply does not repeat it."""
+    data = envelope.get("data") or {}
+    if not envelope.get("ok"):
+        return None
+    if name == "find_candidate_transactions" and len(data.get("candidates") or []) > 1:
+        return ("The app shows these movements to the customer as selectable cards. In one or two sentences, ask the "
+                "customer to pick one. Do not list, number or describe the movements.")
+    if name == "prepare_dispute_case" and data.get("customer_must_confirm"):
+        return ("The app shows these verified facts in a card with confirm buttons. In one or two sentences, ask the "
+                "customer to check the card and confirm. Do not restate the facts.")
+    return None
 
 
 # -- UI blocks: built only from verified tool results --------------------------------------------------------------
@@ -311,6 +338,7 @@ def public_turn(turn):
                                 "fallback", "unverified_ids_in_reply")}
     out["classifier"] = turn.get("classifier")
     out["model_calls"] = turn["model_calls"]
+    out["timeline"] = turn.get("timeline", [])
     out["tools"] = [{
         "tool": ev["tool"], "args": ev["args"], "ok": ev["envelope"].get("ok"),
         "error": (ev["envelope"].get("error") or {}).get("code"),

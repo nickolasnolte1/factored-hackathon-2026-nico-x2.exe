@@ -101,7 +101,7 @@ def new_conversation(body: NewConversation):
         with lock:
             clock.set(DEMO_NOW)
     conv = agent.new_conversation(body.language if body.language in ("es", "pt") else "es")
-    return {"conversation_id": conv.id, "language": conv.language, "now": clock.now().isoformat()}
+    return {"conversation_id": conv.id, "label": conv.label, "language": conv.language, "now": clock.now().isoformat()}
 
 
 @app.post("/api/conversations/{conv_id}/messages")
@@ -158,6 +158,11 @@ def demo_phone(conv_id: str):
     return {"code": code}
 
 
+@app.get("/api/clock")
+def service_clock():
+    return {"now": clock.now().isoformat()}
+
+
 @app.get("/api/conversations/{conv_id}/trace")
 def trace(conv_id: str):
     conv = _conv(conv_id)
@@ -185,6 +190,8 @@ def console():
                 row[key[:-5]] = None
         cid = row.pop("customer_id", None)
         row["customer_ref"] = ("CLI-…" + cid[-4:]) if cid else None  # masked: the full id stays in the store
+        conv = agent.get(row.get("conversation_id") or "")
+        row["turn_label"] = conv.label if conv else None
         row.pop("session_id_hash", None)
         tickets.append(row)
     cases = []
@@ -192,6 +199,8 @@ def console():
         r = dict(r)
         cid = r.pop("customer_id", None)
         r["customer_ref"] = ("CLI-…" + cid[-4:]) if cid else None
+        conv = agent.get(r.get("conversation_id") or "")
+        r["turn_label"] = conv.label if conv else None
         for key in ("session_id_hash", "idempotency_key_hash", "draft_id", "amount_usd"):
             r.pop(key, None)
         cases.append(r)

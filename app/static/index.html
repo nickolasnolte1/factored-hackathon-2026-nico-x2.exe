@@ -3,98 +3,142 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
 <title>Expediente</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,600;112,800&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="preload" href="/static/fonts/atkinson-hyperlegible-next.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/doto.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/fonts/fonts.css">
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-<header class="topbar">
-  <div class="brand">
-    <span class="brand-mark" aria-hidden="true">E</span>
-    <div>
-      <div class="brand-name">Expediente</div>
-      <div class="brand-sub">LATAM Bank · prototipo con datos sintéticos</div>
-    </div>
-  </div>
-  <nav class="tabs" role="tablist" aria-label="Vistas">
-    <button role="tab" id="tab-customer" aria-selected="true" aria-controls="view-customer">Cliente</button>
-    <button role="tab" id="tab-console" aria-selected="false" aria-controls="view-console">Consola del agente <span class="count" id="console-count" hidden></span></button>
-  </nav>
-  <div class="status">
-    <span class="pill mono" title="Reloj del servicio: los datos llegan hasta el 18 jun 2026"><span class="dot"></span><span id="clock-now">—</span></span>
-    <span class="pill mono" id="model-name" title="Modelo de lenguaje">—</span>
-  </div>
-</header>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M4.5 12h13M12.5 6.5l5.5 5.5-5.5 5.5"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 17.5h2"/></symbol>
+    <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19c.7-3 2.9-4.6 5.5-4.6s4.8 1.6 5.5 4.6"/><path d="M15.5 5.6a3.1 3.1 0 0 1 0 5.8M17.6 14.6c1.5.6 2.5 2 2.9 4.4"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-handoff" viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><path d="M3.5 18.5c.6-2.7 2.3-4.2 4.5-4.2"/><path d="M13 13.5h7.5M17.5 10.5l3 3-3 3"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10.5a.5.5 0 0 1-.5-.5V4a.5.5 0 0 1 .5-.5z"/><path d="M14 3.5V8h4M9.5 12.5h5M9.5 16h5"/></symbol>
+  </defs>
+</svg>
 
-<main id="view-customer" class="customer-view" role="tabpanel" aria-labelledby="tab-customer">
-  <aside class="demo-panel" aria-label="Controles de la demo">
-    <section class="panel-block">
-      <h2 class="eyebrow">Clientes de prueba</h2>
-      <p class="hint">Datos sintéticos del concurso. Elige uno para identificarte en el formulario seguro.</p>
-      <div id="personas" class="personas"></div>
+<div class="shell">
+  <aside class="rail" aria-label="Turno y navegación">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+      <span class="brand-text"><span class="brand-name">Expediente</span><span class="brand-bank">LATAM Bank, datos sintéticos</span></span>
+    </div>
+
+    <nav class="views" aria-label="Vistas">
+      <button type="button" id="nav-customer" aria-current="page">Atención al cliente</button>
+      <button type="button" id="nav-console">Consola del especialista <span class="count" id="console-count" hidden></span></button>
+    </nav>
+
+    <section class="display" id="display" aria-live="polite" aria-label="Pantalla de turno">
+      <p class="display-label" id="display-label">Tu turno</p>
+      <p class="display-number" id="turn-number">R-201</p>
+      <p class="display-caption" id="display-caption">Atención de reclamos</p>
     </section>
-    <section class="panel-block">
-      <h2 class="eyebrow">Teléfono del cliente <span class="tag">simulado</span></h2>
-      <div class="phone" id="phone">
-        <div class="phone-empty">Aquí llega el código por SMS cuando el cliente lo pide.</div>
+
+    <ol class="stages" id="stages" aria-label="Etapas del turno">
+      <li data-stage="identity"><span class="pip" aria-hidden="true"></span><span class="stage-name">Identificación</span></li>
+      <li data-stage="movement"><span class="pip" aria-hidden="true"></span><span class="stage-name">Movimiento</span></li>
+      <li data-stage="confirm"><span class="pip" aria-hidden="true"></span><span class="stage-name">Confirmación</span></li>
+      <li data-stage="result"><span class="pip" aria-hidden="true"></span><span class="stage-name" id="stage-result-name">Resultado</span></li>
+    </ol>
+
+    <div class="session" id="session">
+      <p class="session-state" id="session-state">Sin identificar</p>
+      <div class="session-meter" id="session-meter" hidden><span id="session-fill"></span></div>
+      <p class="session-detail" id="session-detail">El cliente verifica su identidad en el formulario seguro.</p>
+    </div>
+
+    <div class="rail-foot">
+      <div class="sms" id="sms" hidden aria-live="polite">
+        <svg class="ic" aria-hidden="true"><use href="#i-phone"/></svg>
+        <div>
+          <p class="sms-from">SMS de LATAM Bank, teléfono simulado</p>
+          <p class="sms-text">Tu código es <span class="sms-code" id="sms-code"></span></p>
+        </div>
       </div>
-    </section>
-    <section class="panel-block">
-      <h2 class="eyebrow">Controles</h2>
-      <div class="controls">
-        <button class="btn ghost" id="btn-new">Nueva conversación</button>
-        <button class="btn ghost" id="btn-clock" title="Adelanta el reloj del servicio 16 minutos: la sesión de 15 minutos vence">Adelantar 16 min</button>
+      <div class="tools" aria-label="Herramientas de demo">
+        <button type="button" class="rail-btn" id="btn-personas"><svg class="ic" aria-hidden="true"><use href="#i-people"/></svg>Clientes de prueba</button>
+        <button type="button" class="rail-btn" id="btn-new"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Nuevo turno</button>
+        <button type="button" class="rail-btn" id="btn-clock" title="Adelanta el reloj del servicio 16 minutos para mostrar que la sesión vence"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg>Adelantar 16 min</button>
       </div>
-    </section>
+      <dl class="meta">
+        <div><dt>Reloj del servicio</dt><dd id="clock-now">—</dd></div>
+        <div><dt>Modelo</dt><dd id="model-name">—</dd></div>
+      </dl>
+    </div>
   </aside>
 
-  <section class="chat" aria-label="Chat del cliente">
-    <div class="chat-head">
-      <div class="avatar" aria-hidden="true">LB</div>
-      <div class="chat-title">
-        <div class="name">Asistente de LATAM Bank</div>
-        <div class="sub" id="session-state"><span class="lock"></span>Sin identificar</div>
+  <main class="work" id="view-customer">
+    <section class="chat" aria-label="Chat del cliente">
+      <header class="ticket">
+        <div>
+          <h1 class="ticket-title">Turno <span id="ticket-number">R-201</span></h1>
+          <p class="ticket-sub">Reclamos por cargos no reconocidos y cobros incorrectos</p>
+        </div>
+        <p class="ticket-time" id="ticket-time">—</p>
+      </header>
+      <div class="messages" id="messages"></div>
+      <div class="starters" id="starters">
+        <button type="button">Me aparece un cobro que no reconozco</button>
+        <button type="button">Me cobraron una comisión que no corresponde</button>
+        <button type="button">Perdí mi tarjeta</button>
+        <button type="button">Tem uma compra no meu cartão que eu não fiz</button>
       </div>
-    </div>
-    <div class="messages" id="messages" aria-live="polite"></div>
-    <div class="starters" id="starters">
-      <button class="chip">Me aparece un cobro que no reconozco</button>
-      <button class="chip">Me cobraron una comisión que no corresponde</button>
-      <button class="chip">Perdí mi tarjeta</button>
-      <button class="chip">Tem uma compra no meu cartão que eu não fiz</button>
-    </div>
-    <form class="composer" id="composer">
-      <label for="input" class="sr-only">Mensaje</label>
-      <textarea id="input" rows="1" placeholder="Escribe tu mensaje…" autocomplete="off"></textarea>
-      <button class="btn primary" id="send" type="submit">Enviar</button>
-    </form>
-  </section>
+      <form class="composer" id="composer">
+        <label for="input" class="sr-only">Mensaje para el asistente</label>
+        <textarea id="input" rows="1" placeholder="Escribe tu mensaje" autocomplete="off"></textarea>
+        <button class="send" id="send" type="submit" aria-label="Enviar mensaje"><svg class="ic" aria-hidden="true"><use href="#i-send"/></svg></button>
+      </form>
+    </section>
 
-  <aside class="trace-panel" aria-label="Por dentro">
-    <div class="trace-head">
-      <h2 class="eyebrow">Por dentro</h2>
-      <p class="hint">Cada herramienta que usó el asistente, con su resultado, su evidencia y su costo. El modelo nunca ve el documento, el código ni el número de cliente.</p>
-    </div>
-    <div id="trace" class="trace"><div class="trace-empty">Todavía no hay turnos.</div></div>
-  </aside>
-</main>
+    <section class="trace" aria-label="Traza del asistente">
+      <header class="trace-head">
+        <h2>Traza</h2>
+        <p>Cada herramienta que usó el asistente, con su resultado y lo que tardó. El modelo nunca ve el documento, el código ni el número de cliente.</p>
+        <p class="trace-pending">Clasificador de intención: pendiente de conexión.</p>
+      </header>
+      <div class="turns" id="trace"><p class="trace-empty">Cuando el cliente escriba, aquí aparece cada paso del asistente.</p></div>
+    </section>
+  </main>
 
-<main id="view-console" class="console-view" role="tabpanel" aria-labelledby="tab-console" hidden>
-  <section class="console-list">
-    <div class="console-head">
-      <h2>Transferencias a humano</h2>
-      <button class="btn ghost" id="btn-refresh">Actualizar</button>
-    </div>
-    <div id="tickets" class="tickets"></div>
-    <h2 class="cases-title">Reclamos creados en el chat</h2>
-    <div id="cases" class="cases"></div>
-  </section>
-  <section class="console-detail" id="ticket-detail">
-    <div class="detail-empty">Elige una transferencia para ver su expediente.</div>
-  </section>
-</main>
+  <main class="work console" id="view-console" hidden>
+    <section class="board" aria-label="Llamados a especialista">
+      <header class="board-head">
+        <h1>Llamados a especialista</h1>
+        <button type="button" class="ghost" id="btn-refresh">Actualizar</button>
+      </header>
+      <ol class="calls" id="calls"></ol>
+      <h2 class="cases-title">Reclamos abiertos en el chat</h2>
+      <div class="table-wrap">
+        <table class="cases">
+          <thead><tr><th scope="col">Caso</th><th scope="col">Turno</th><th scope="col">Tipo</th><th scope="col" class="num">Monto</th><th scope="col">Prioridad</th><th scope="col">Primera respuesta</th></tr></thead>
+          <tbody id="cases"></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="file" id="file" aria-label="Expediente">
+      <p class="file-empty">Elige un llamado para abrir su expediente.</p>
+    </section>
+  </main>
+</div>
+
+<div class="sheet" id="personas-sheet" role="dialog" aria-modal="false" aria-labelledby="personas-title" hidden>
+  <header>
+    <h2 id="personas-title">Clientes de prueba</h2>
+    <button type="button" class="ghost" id="btn-close-personas" aria-label="Cerrar"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+  </header>
+  <p class="sheet-note">Clientes sintéticos del concurso. Usar uno completa el formulario seguro con su documento.</p>
+  <ul class="personas" id="personas"></ul>
+</div>
 
 <script src="/static/app.js"></script>
 </body>
