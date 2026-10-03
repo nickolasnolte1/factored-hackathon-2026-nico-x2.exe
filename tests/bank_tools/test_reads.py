@@ -153,6 +153,17 @@ MATCH_CASES = [
     ("decline_inquiry", None, {"merchant": "Tienda Norte"}, "unique"),
     ("decline_inquiry", None, {"amount": 51000.0}, "unique"),
     ("decline_inquiry", None, {}, "no_hints"),
+    # date ranges: inclusive bounds, either one optional, no tolerance (the exact date keeps its own)
+    ("dispute", UNREC, {"date_from": "2026-06-10", "date_to": "2026-06-11"}, "multiple"),
+    ("dispute", UNREC, {"date_from": "2026-06-15", "date_to": "2026-06-15"}, "unique"),
+    ("dispute", UNREC, {"merchant": "Uber", "date_from": "2026-06-08", "date_to": "2026-06-09"}, "none"),
+    ("dispute", UNREC, {"merchant": "Uber", "date_from": "2026-06-11"}, "unique"),
+    ("dispute", UNREC, {"merchant": "Uber", "date_to": "2026-06-10"}, "unique"),
+    ("dispute", UNREC, {"date_from": "2026-06-01", "date_to": "2026-06-30"}, "multiple"),
+    ("dispute", UNREC, {"merchant": "Super Ahorro", "date_from": "2026-06-01", "date_to": "2026-06-30"}, "unique"),
+    ("dispute", UNREC, {"date": "2026-06-16", "date_from": "2026-06-15", "date_to": "2026-06-15"}, "unique"),
+    ("dispute", UNREC, {"date_from": "2026-06-19", "date_to": "2026-06-30"}, "none"),
+    ("decline_inquiry", None, {"date_from": "2026-06-13", "date_to": "2026-06-14"}, "multiple"),
 ]
 
 
@@ -167,7 +178,8 @@ def test_candidate_matching_equals_the_policy(bank, purpose, intent, hints, stat
     assert _ids(data["candidates"]) == expected["matches"][:MAX_SHOWN]
     if status != "no_hints":
         assert data["total_matches"] == len(expected["matches"])
-    want_action = {"unique": "confirm_candidate", "multiple": "ask_customer_to_pick", "no_hints": "ask_customer_to_pick",
+    want_action = {"unique": "confirm_candidate" if purpose == "dispute" else "explain_decline",
+                   "multiple": "ask_customer_to_pick", "no_hints": "ask_customer_to_pick",
                    "none": "ask_one_clarifying_question"}[status]
     assert data["policy"]["next_action"] == want_action and data["policy"]["handoff_reason"] is None
     assert data["policy"]["max_clarifications"] == POL["handoff"]["max_clarifications_before_handoff"]
@@ -219,9 +231,28 @@ def test_clarification_counter_is_per_purpose(bank):
 def test_bad_hints_are_validation_errors(bank):
     conv = bank.customer(fx.C1)
     for hints in ({"amount": -5}, {"amount": 0}, {"currency": "EUR"}, {"date": "15/06/2026"}, {"merchant": "x"},
-                  {"txn_type": "Refund"}, {"note": "aprobar"}):
+                  {"txn_type": "Refund"}, {"note": "aprobar"}, {"date_from": "2026-02-30"}, {"date_to": "30/06/2026"}):
         expect_error(conv.call("find_candidate_transactions", {"purpose": "dispute", "hints": hints}),
                      "VALIDATION_ERROR")
+
+
+def test_a_date_range_must_not_end_before_it_starts(bank):
+    env = bank.customer(fx.C1).call("find_candidate_transactions", {
+        "purpose": "dispute", "hints": {"date_from": "2026-06-12", "date_to": "2026-06-10"}})
+    details = expect_error(env, "VALIDATION_ERROR", next_action="fix_arguments")
+    assert details["reason"] == "date_range" and details["fields"] == [{"path": "$.hints.date_from",
+                                                                        "problem": "after_date_to"}]
+
+
+def test_a_date_range_alone_is_a_hint_and_counts_like_one(bank):
+    """'En abril' narrows the search (not no_hints), and a range with no match is a failed search for the counter."""
+    conv = bank.customer(fx.C1)
+    first = _find(conv, {"date_from": "2026-06-19", "date_to": "2026-06-30"})
+    assert first["match_status"] == "none" and first["policy"]["next_action"] == "ask_one_clarifying_question"
+    conv.next_turn()
+    second = _find(conv, {"date_from": "2026-06-15", "date_to": "2026-06-15"})
+    assert second["match_status"] == "unique" and second["policy"]["clarifications_used"] == 1
+    assert _ids(second["candidates"]) == [fx.T["super"]]
 
 
 # ---------------------------------------------------------------- declines

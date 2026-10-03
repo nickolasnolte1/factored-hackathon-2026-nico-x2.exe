@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 
 from src.policy import dispute_policy as dp
 
+from .amounts import parse_amount, regroup_three_decimals
 from .clock import RealSleeper, RecordingSleeper, epoch, iso, wall_utc
 from .config import FAULT_ENVS, SERVICE_VERSION, Config
 from .errors import MalformedRecord, RepositoryError, ToolError, Unavailable
@@ -42,6 +43,7 @@ BALANCE_KIND = {"Savings Account": "funds", "Checking Account": "funds", "Debit 
 QUEUES = {"suspected_card_compromise": "card_security", "card_block_request": "card_security",
           "customer_status_restricted": "account_restrictions", "complaint_routing": "complaints"}
 TRANSACTION_LEVEL_REASONS = ("outside_dispute_window", "amount_above_threshold")
+HINT_KEYS = ("amount", "currency", "date", "date_from", "date_to", "merchant", "txn_type", "channel")
 INTERNAL_POLICY_PATHS = ("handoff.amount_usd_threshold", "handoff.threshold_calibration", "priority.high_amount_usd",
                          "priority.medium_amount_usd", "priority.calibration", "transaction_matching",
                          "handoff.min_intent_confidence", "handoff.max_clarifications_before_handoff",
@@ -81,6 +83,20 @@ def _check_date(value, path):
     except ValueError:
         raise ToolError("VALIDATION_ERROR", {"reason": "schema", "fields": [{"path": path, "problem": "date"}]},
                         internal_reason="bad_date") from None
+
+
+def _unique(items):
+    """A list without repeated strings (first occurrence kept); anything else is left for the validator."""
+    if not isinstance(items, list):
+        return items
+    seen, out = set(), []
+    for item in items:
+        if isinstance(item, str):
+            if item in seen:
+                continue
+            seen.add(item)
+        out.append(item)
+    return out
 
 
 def _ordered(schema, data):
@@ -343,9 +359,15 @@ class BankService:
                             internal_reason="schema:depth")
         schema = spec["input_schema"]
         clean = normalize(schema, args)
-        if spec["name"] == "handoff_to_human" and isinstance(clean.get("package"), dict):
-            # Section 3.15: texts above the limits are cut (and reported), never a reason to refuse a handoff.
-            call.truncated = truncate_to_limits(schema["properties"]["package"], clean["package"], "package")
+        if spec["name"] == "handoff_to_human":
+            # Section 3.15: a handoff is the safe fallback. Repeated ids are dropped and texts above the limits are
+            # cut (and reported); neither is a reason to refuse it.
+            if isinstance(clean.get("package"), dict):
+                if "evidence" in clean["package"]:
+                    clean["package"]["evidence"] = _unique(clean["package"]["evidence"])
+                call.truncated = truncate_to_limits(schema["properties"]["package"], clean["package"], "package")
+            if "candidate_transaction_ids" in clean:
+                clean["candidate_transaction_ids"] = _unique(clean["candidate_transaction_ids"])
         problems = self.schemas.validate_input(spec["name"], clean)
         if problems:
             raise ToolError("VALIDATION_ERROR", {"reason": "schema", "fields": problems[:20]},
@@ -547,8 +569,25 @@ class BankService:
         purpose = args["purpose"]
         intent = args.get("intent") if purpose == "dispute" else None
         hints = args.get("hints") or {}
-        claim = {k: hints[k] for k in ("amount", "currency", "date", "merchant", "txn_type", "channel") if k in hints}
-        _check_date(claim.get("date"), "$.hints.date")
+        claim = {k: hints[k] for k in HINT_KEYS if k in hints}
+        for key in ("date", "date_from", "date_to"):
+            _check_date(claim.get(key), "$.hints." + key)
+        if claim.get("date_from") and claim.get("date_to") and claim["date_from"] > claim["date_to"]:
+            raise ToolError("VALIDATION_ERROR", {"reason": "date_range",
+                                                 "fields": [{"path": "$.hints.date_from", "problem": "after_date_to"}]},
+                            internal_reason="date_range")
+        today = call.now_iso[:10]
+        for key in ("date", "date_from"):  # a weekday resolved forward ("la segunda" -> next Monday) finds nothing
+            if claim.get(key) and claim[key] > today:
+                raise ToolError("VALIDATION_ERROR", {"reason": "schema",
+                                                     "fields": [{"path": "$.hints." + key, "problem": "after_now"}]},
+                                internal_reason="date_after_now")
+        if isinstance(claim.get("amount"), str):
+            claim["amount"], currency = self._amount_from_text(claim["amount"])
+            if currency:  # a code or symbol the customer wrote outranks a currency the model inferred
+                claim["currency"] = currency
+        elif isinstance(claim.get("amount"), (int, float)) and not isinstance(claim["amount"], bool):
+            claim["amount"] = regroup_three_decimals(claim["amount"])
         rows = self.guarded.list_transactions(s.customer_id, call.now_iso)
         if purpose == "dispute":
             cands = dp.candidate_transactions(rows, s.customer_id, call.now, intent, self.pol)
@@ -561,8 +600,8 @@ class BankService:
         used = sum(1 for turn, st in counter["turns"].items() if int(turn) < ctx.turn_index and st != "unique")
         max_clar = self.pol["handoff"]["max_clarifications_before_handoff"]
         handoff_reason = None
-        if status == "unique":
-            next_action = "confirm_candidate"
+        if status == "unique":  # explaining a decline only reads: no confirmation step is needed
+            next_action = "explain_decline" if purpose == "decline_inquiry" else "confirm_candidate"
         elif status in ("multiple", "no_hints"):
             next_action = "ask_customer_to_pick"
         else:
@@ -571,7 +610,7 @@ class BankService:
         counter["turns"][str(ctx.turn_index)] = status
         counter["last"] = {"turn": ctx.turn_index, "match_status": status, "clarifications_used": used,
                            "next_action": next_action}
-        self.state.put("counter", key, counter)
+        self.state.put("counter", key, counter, expires_at=call.now + timedelta(days=1))
         by_id = {t["transaction_id"]: t for t in cands}
         shown = match["matches"][:self.pol["transaction_matching"]["max_candidates_shown"]]
         call.policy_decision.update(match_status=status, clarifications_used=used, next_action=next_action,
@@ -582,6 +621,17 @@ class BankService:
                 "total_matches": len(match["matches"]),
                 "policy": {"clarifications_used": used, "max_clarifications": max_clar, "next_action": next_action,
                            "handoff_reason": handoff_reason}}
+
+    @staticmethod
+    def _amount_from_text(text):
+        """(amount, explicit currency or None) for hints.amount written as text (amounts.py: the same reading for
+        every country, since money amounts never have three decimals)."""
+        try:
+            return parse_amount(text)
+        except ValueError:
+            raise ToolError("VALIDATION_ERROR", {"reason": "schema",
+                                                 "fields": [{"path": "$.hints.amount", "problem": "amount_format"}]},
+                            internal_reason="amount_format") from None
 
     def _h_explain_decline(self, args, call):
         s, lang = call.session, args["language"]
@@ -892,7 +942,7 @@ class BankService:
                 "values": {p: copy.deepcopy(self._policy_value(p)) for p in spec["values"]},
                 "policy_id": self.pol["policy_id"], "policy_version": self.pol["version"], "synthetic": True}
 
-    def _reason_check(self, reason, session, draft, conversation_id):
+    def _reason_check(self, reason, session, draft, conversation_id, caller="model"):
         index = self.state.get("tool_calls", conversation_id, [])
         if reason == "customer_status_restricted":
             if session is None:
@@ -914,8 +964,10 @@ class BankService:
                     return "consistent"
             return "inconsistent"
         if reason == "tool_failure":
-            failed = any(e.get("error_code") in ("UNAVAILABLE", "INTERNAL") for e in index)
-            return "consistent" if failed else "inconsistent"
+            if any(e.get("error_code") in ("UNAVAILABLE", "INTERNAL") for e in index):
+                return "consistent"
+            # The runtime hands off on failures the service cannot see (the model endpoint, for example).
+            return "not_verifiable" if caller == "runtime" else "inconsistent"
         return "not_verifiable"
 
     def _h_handoff_to_human(self, args, call):
@@ -980,7 +1032,7 @@ class BankService:
                                        "event_date": row["event_date"], "transaction_type": row["transaction_type"],
                                        "transaction_status": row["transaction_status"], "amount": row["amount"],
                                        "currency": row["currency"]})
-        check = self._reason_check(reason, s, draft, ctx.conversation_id)
+        check = self._reason_check(reason, s, draft, ctx.conversation_id, ctx.caller)
         draft_status, priority = None, None
         if draft is not None:
             draft_status = "case_created" if draft["status"] == "case_created" else "pending_human_review"

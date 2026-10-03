@@ -7,16 +7,16 @@
 """
 from .audit import DatabricksAuditSink, JsonlAuditSink, ListAuditSink, TeeAuditSink
 from .clock import FixedClock, SystemClock, clock_from_config
-from .config import SERVICE_VERSION, Config
+from .config import SERVICE_VERSION, Config, demo_config
 from .errors import ToolError
 from .faults import FaultInjector, NullFaultInjector
 from .identity import TestOutbox
 from .repository import LocalRepository
 from .service import BankService, ToolContext, ToolResult
 
-__all__ = ["build_service", "BankService", "ToolContext", "ToolResult", "ToolError", "Config", "FixedClock",
-           "SystemClock", "FaultInjector", "NullFaultInjector", "LocalRepository", "ListAuditSink", "JsonlAuditSink",
-           "DatabricksAuditSink", "TeeAuditSink", "TestOutbox", "SERVICE_VERSION"]
+__all__ = ["build_service", "BankService", "ToolContext", "ToolResult", "ToolError", "Config", "demo_config",
+           "FixedClock", "SystemClock", "FaultInjector", "NullFaultInjector", "LocalRepository", "ListAuditSink",
+           "JsonlAuditSink", "DatabricksAuditSink", "TeeAuditSink", "TestOutbox", "SERVICE_VERSION"]
 
 
 def build_service(config=None, *, clock=None, repository=None, audit=None, faults=None, **kwargs):

@@ -824,7 +824,7 @@
       "fault_ops": [
         "get_transactions"
       ],
-      "description": "Find which of the customer's own movements a dispute (purpose=dispute) or a decline question (purpose=decline_inquiry) refers to. Pass only what the customer said as hints; resolve relative dates to YYYY-MM-DD with the service clock. Hints only filter: never present a hint as a fact. Follow policy.next_action: confirm_candidate -> call prepare_dispute_case (or explain_decline) and ask the customer to confirm that movement; ask_customer_to_pick -> show the candidates and ask which one; ask_one_clarifying_question -> ask one question, then search again; handoff -> call handoff_to_human with policy.handoff_reason. Pass empty hints when the customer gave no details.",
+      "description": "Find which of the customer's own movements a dispute (purpose=dispute) or a decline question (purpose=decline_inquiry) refers to. Pass only what the customer said as hints. Resolve relative dates with the service clock: one day to date, a period ('en abril', 'el mes pasado', 'la semana pasada') to date_from and date_to. Pass an amount with separators as text, exactly as the customer wrote it (\"109.686\", \"$1'985.843\", \"494,11\"), and an amount without separators as a plain number. Hints only filter: never present a hint as a fact. Follow policy.next_action: confirm_candidate -> call prepare_dispute_case and ask the customer to confirm that movement; explain_decline -> call explain_decline with that transaction_id now (it only reads: no confirmation); ask_customer_to_pick -> show the candidates and ask which one; ask_one_clarifying_question -> ask one question, then search again; handoff -> call handoff_to_human with policy.handoff_reason. Pass empty hints when the customer gave no details.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -853,11 +853,14 @@
               "amount": {
                 "type": [
                   "number",
+                  "string",
                   "null"
                 ],
                 "exclusiveMinimum": 0,
                 "maximum": 1000000000000,
-                "description": "Amount the customer mentioned, as a plain number (1.234,56 -> 1234.56)."
+                "minLength": 1,
+                "maxLength": 40,
+                "description": "Amount the customer mentioned: a plain number (1.234,56 -> 1234.56), or the text as the customer wrote it (\"109.686\", \"$1'985.843\", \"1.299,90\", \"R$ 1.200,00\"). Text is read the same way in every country: one '.' or ',' followed by three digits groups thousands, followed by one or two digits it is the decimal mark, and with both '.' and ',' the last one is the decimal mark. A code or symbol in the text (USD, COP, ARS, MXN, BRL, R$, US$, AR$, MX$, COL$) sets the currency; a bare '$' does not."
               },
               "currency": {
                 "type": [
@@ -880,7 +883,23 @@
                   "null"
                 ],
                 "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-                "description": "Date the customer mentioned, resolved to YYYY-MM-DD."
+                "description": "One day the customer mentioned, resolved to YYYY-MM-DD from meta.now; never a day after meta.now (a weekday means the most recent one)."
+              },
+              "date_from": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "description": "First day of a period the customer mentioned, YYYY-MM-DD, inclusive ('en abril' -> 04-01)."
+              },
+              "date_to": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "description": "Last day of that period, YYYY-MM-DD, inclusive ('en abril' -> 04-30)."
               },
               "merchant": {
                 "type": [
@@ -972,6 +991,7 @@
                 "type": "string",
                 "enum": [
                   "confirm_candidate",
+                  "explain_decline",
                   "ask_customer_to_pick",
                   "ask_one_clarifying_question",
                   "handoff"
@@ -1853,7 +1873,7 @@
                 },
                 "maxItems": 30,
                 "uniqueItems": true,
-                "description": "meta.tool_call_id of the tool results relied on."
+                "description": "meta.tool_call_id of the tool results relied on (repeated ids are dropped)."
               },
               "open_questions": {
                 "type": "array",
@@ -1893,7 +1913,7 @@
             },
             "maxItems": 5,
             "uniqueItems": true,
-            "description": "Movements under discussion when none was confirmed."
+            "description": "Movements under discussion when none was confirmed (repeated ids are dropped)."
           },
           "idempotency_key": {
             "type": [

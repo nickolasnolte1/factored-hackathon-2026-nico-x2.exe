@@ -162,8 +162,10 @@ def redact_args(args):
     if isinstance(out.get("confirmation_id"), str):
         out["confirmation_id"] = out["confirmation_id"].split(".", 1)[0][:16] + ".[sig]"
     hints = out.get("hints")
-    if isinstance(hints, dict) and "merchant" in hints:
-        hints["merchant"] = _scrub_cut(hints["merchant"])
+    if isinstance(hints, dict):
+        for key in ("merchant", "amount"):  # an amount may arrive as the customer's own text
+            if isinstance(hints.get(key), str):
+                hints[key] = _scrub_cut(hints[key])
     package = out.get("package")
     if isinstance(package, dict):
         for key, value in package.items():

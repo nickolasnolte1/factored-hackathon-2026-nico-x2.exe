@@ -18,6 +18,8 @@ DEV_SESSION_KEY = "dev-only-change-me-session-signing-key-000000"
 DEV_OTP_KEY = "dev-only-change-me-otp-hash-key-0000000000000"
 IDENTIFIER = re.compile(r"^[a-z_][a-z0-9_]*$")
 MIN_KEY_BYTES = 32
+# A live demo signs the same personas in many times and runs long sessions; the other envs keep the defaults.
+DEMO_LIMITS = {"challenges_per_document": 50, "session_calls_per_window": 400}
 
 _ENV_MAP = {  # attribute -> environment variable
     "env": "BANK_TOOLS_ENV",
@@ -132,6 +134,12 @@ class Config:
         if not value:
             return value
         return value if os.path.isabs(value) or value == ":memory:" else os.path.join(REPO_ROOT, value)
+
+
+def demo_config(environ=None, **overrides):
+    """Config for env demo with DEMO_LIMITS (sign-in challenges per document per hour, calls per session per
+    window), so a long demo session never hits RATE_LIMITED. Like any demo config it needs real keys."""
+    return Config.from_env(environ, **{"env": "demo", **DEMO_LIMITS, **overrides})
 
 
 def _cast(kind, raw):

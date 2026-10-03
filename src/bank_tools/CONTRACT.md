@@ -59,8 +59,9 @@ chat runtime (UI + model loop)
 | Path | Content |
 |---|---|
 | `__init__.py` | `build_service(config=None, *, clock, repository, audit, faults)`: reads the environment (§11) and wires the parts; every part can be overridden |
-| `config.py` | `Config.from_env()`: the variables of §11, dev-key defaults, identifier checks |
+| `config.py` | `Config.from_env()`: the variables of §11, dev-key defaults, identifier checks; `demo_config()` (§4) |
 | `service.py` | `BankService`: `call_tool`, one public method per tool, the handlers, `ToolContext`, `ToolResult` |
+| `amounts.py` | `parse_amount(text)`: amounts written by the customer, read the same way for every country (§3.8) |
 | `identity.py` | Challenges, OTP delivery (`TestOutbox`), session tokens, test session issuer |
 | `ids.py` | `IdFactory` (§3.1) |
 | `errors.py` | `ToolError(code, message, retryable, details)`, the error catalog (§4) |
@@ -183,6 +184,7 @@ Every customer-scoped method takes `customer_id` and puts it in the `WHERE` clau
   - content: `request_summary` (scrubbed), `agent_reported_json`, `service_verified_json`, `redactions`;
   - versions: `policy_version`, `service_version`, `env`.
 - **`ops.tool_audit`**: the columns of §7, nested fields as JSON strings, plus `recorded_date` (the clustering and retention key).
+- **`store_rows(table)`** returns every row of `ops.dispute_cases` or `ops.handoff_tickets` whose `env` is the configured env, normalized exactly like `LocalRepository.store_rows` (same keys, types and order by `created_at`). The human agent console reads it; it is not part of the tool interface.
 
 ### 1.6 LocalRepository and the snapshot
 
@@ -190,7 +192,7 @@ Every customer-scoped method takes `customer_id` and puts it in the `WHERE` clau
   - The snapshot SQLite is opened read-only (`mode=ro` URI).
   - Cases and tickets go to a separate writable store, in memory by default. Every evaluation scenario therefore starts clean, and the snapshot is never modified.
   - Tables and columns mirror Gold: `customer_identity`, `customer_profile`, `customer_products`, `customer_transactions` (indexed on `customer_id, event_ts`) and `decline_codes`, plus `dispute_cases` and `handoff_tickets` in the store, and a `snapshot_meta` table read by `health()`.
-  - `store_rows(table)` returns every store row, for harnesses and tests only (not part of the interface).
+  - `store_rows(table)` returns every store row, for the agent console, harnesses and tests (not part of the tool interface). `DatabricksRepository` has the same helper (§1.5).
 - **`python -m src.bank_tools.snapshot`** writes to the git-ignored `data/bank_tools/`:
 
 | Source | Command | Use |
@@ -336,7 +338,7 @@ payload = {"v": 1, "sid": "<22 random base64url>", "sub": "<customer_id>", "iat"
   - Input schemas are self-contained, with no `$ref`. Output schemas may `$ref` into `#/$defs` of `tool_schemas.json`.
   - Providers that take `{name, description, input_schema}` use the entries as they are. Function-calling APIs that expect `parameters` receive `input_schema` under that key.
 - **Normalization before validation.** Strings are trimmed. Id fields (`transaction_id`, `product_id`, `case_id`, `challenge_id`) are upper-cased. `null` optional fields are treated as absent.
-- **Validation errors** list JSON paths and problems (`required`, `pattern`, `enum`, `max_length`, `type`, `unknown_field`, `depth`). They never echo the offending value, which could carry injected text.
+- **Validation errors** list JSON paths and problems (`required`, `pattern`, `enum`, `max_length`, `type`, `unknown_field`, `depth`, `date`, `after_date_to`, `after_now`, `amount_format`). They never echo the offending value, which could carry injected text.
   - Arguments nested deeper than 6 containers are refused before normalization (`depth` at `$`), so they never become an `INTERNAL` error that could pass for a tool failure.
   - NaN and infinities are not numbers (`type`): JSON has no such values, and NaN would pass every bound check and match every amount.
 - **Ids:**
@@ -431,9 +433,16 @@ payload = {"v": 1, "sid": "<22 random base64url>", "sub": "<customer_id>", "iat"
 - **Input:**
   - `purpose`: `dispute` or `decline_inquiry`;
   - `intent`: `dispute_unrecognized_charge`, `dispute_incorrect_charge_or_fee` or null (any dispute type);
-  - `hints`: `{amount, currency, date, merchant, txn_type, channel}`, each optional, with the same keys as the policy claim. `currency` is one of USD, COP, ARS, MXN or BRL. `date` is a calendar date the agent resolves from `meta.now`.
+  - `hints`: `{amount, currency, date, date_from, date_to, merchant, txn_type, channel}`, each optional, with the same keys as the policy claim. `currency` is one of USD, COP, ARS, MXN or BRL. `date` is one calendar day the agent resolves from `meta.now`. `date_from` and `date_to` are an inclusive period (also resolved from `meta.now`) for "en abril", "el mes pasado" or "la semana pasada"; either bound may come alone, and `date_from` after `date_to` is `VALIDATION_ERROR` (`date_range`). A `date` or `date_from` after the day of `meta.now` is `VALIDATION_ERROR` with `{path, problem: "after_now"}`: a weekday resolved forward ("na segunda" read as next Monday) would otherwise find nothing.
+  - `amount` is a number, or the amount as the customer wrote it (a string of up to 40 characters, such as `"109.686"`, `"$1'985.843"`, `"1.299,90"`, `"R$ 1.200,00"`, `"USD 6 733.52"`). The tool description tells the model to pass an amount with separators as text and one without separators as a number. A number with exactly three decimals (`73.462`) is read as grouped thousands (73462), for the same reason as the text rule; a misread whose last three digits are zeros (`250.000` sent as 250.0) cannot be recovered.
+- **Amount text** (`amounts.py`). The service reads it the same way for every customer, whatever the country or the language, since money amounts never have three decimals:
+  - A single `.` or `,` followed by exactly three digits groups thousands (`109.686` is 109686, `1,250` is 1250, `9.951` is 9951), unless the digits before it are too many to group (`1234.567` is 1234.567).
+  - A single separator followed by one, two, or four or more digits is the decimal mark (`494.11`, `1299,90`); with both `.` and `,` the last one is the decimal mark (`1.299,90`, `1,299.90`); a separator that appears more than once groups (`1.234.567`). `'` and spaces always group (`$1'985.843`). Groups after the first must have three digits; when the preferred reading breaks this, the other reading is used if it fits.
+  - No customer data is read for it, so the tool's only fault op stays `get_transactions`.
+  - A currency code or symbol in the text sets the currency hint only when it is explicit: `USD`, `COP`, `ARS`, `MXN`, `BRL`, `R$` (BRL), `US$`, `U$S` and `U$D` (USD), `AR$` (ARS), `MX$` (MXN) and `COL$` (COP). It replaces a `currency` hint the model sent, since it is the customer's own text. A bare `$` and the words pesos, reais, dólares or verdes set nothing.
+  - Anything else (words such as "mil", two currencies, a sign, an amount of 0 or above 10^12) is `VALIDATION_ERROR` with `{path: "$.hints.amount", problem: "amount_format"}`. The text is never echoed, and the audit stores it PII-scrubbed.
 - **Matching** (only `dispute_policy`):
-  - `dispute`: `candidate_transactions(rows, customer_id, now, intent)`, which applies the 180-day lookback, eligible statuses and types, and only events at or before now. Then `match_transactions(hints, candidates)`: amount ±1%, the same currency when given, date ±2 days, merchant similarity of at least 0.8, every hint holding.
+  - `dispute`: `candidate_transactions(rows, customer_id, now, intent)`, which applies the 180-day lookback, eligible statuses and types, and only events at or before now. Then `match_transactions(hints, candidates)`: amount ±1%, the same currency when given, date ±2 days, event date inside `date_from`..`date_to` (no tolerance), merchant similarity of at least 0.8, every hint holding. A period alone is a hint, so it narrows the search instead of giving `no_hints`.
   - `decline_inquiry`: `candidate_transactions(..., statuses=("Declined",))`, then the same matching.
   - Hints only filter. They are never stored as facts or returned as facts, and claims are never converted between currencies.
 - **Output:**
@@ -443,13 +452,14 @@ payload = {"v": 1, "sid": "<22 random base64url>", "sub": "<customer_id>", "iat"
  "candidates": ["TransactionView, at most transaction_matching.max_candidates_shown (5), policy order"],
  "total_matches": 1,
  "policy": {"clarifications_used": 0, "max_clarifications": 1,
-            "next_action": "confirm_candidate | ask_customer_to_pick | ask_one_clarifying_question | handoff",
+            "next_action": "confirm_candidate | explain_decline | ask_customer_to_pick | ask_one_clarifying_question | handoff",
             "handoff_reason": null}}
 ```
 
 - **`total_matches`** is the length of the policy's match list; for `no_hints` that is the most recent candidates shown.
 - **`next_action`:**
-  - `unique` → `confirm_candidate`: call `prepare_dispute_case` (or `explain_decline`), show the verified facts and ask the customer to confirm.
+  - `unique` for `dispute` → `confirm_candidate`: call `prepare_dispute_case`, show the verified facts and ask the customer to confirm.
+  - `unique` for `decline_inquiry` → `explain_decline`: call `explain_decline` with that `transaction_id` right away. It only reads, so no confirmation step is needed.
   - `multiple` or `no_hints` → `ask_customer_to_pick`.
   - `none` with `clarifications_used < max_clarifications_before_handoff` → `ask_one_clarifying_question`.
   - `none` otherwise → `handoff` with `no_match_after_clarification`, decided by `dispute_policy.requires_handoff({"match_status": "none", "match_clarifications": n})`.
@@ -458,7 +468,7 @@ payload = {"v": 1, "sid": "<22 random base64url>", "sub": "<customer_id>", "iat"
   - `clarifications_used` counts the earlier customer turns (`turn_index` less than the current one) in which a search for that purpose ended non-unique.
   - The current turn is recorded after the decision, so repeated calls within one turn never add up.
   - This reproduces `expected_outcome`: no hints, then a unique match, is `clarify_then_create_case`; none, then none again, is `clarify_then_handoff`.
-- **Errors:** `VALIDATION_ERROR`, `AUTH_REQUIRED`, `SESSION_EXPIRED`, `POLICY_BLOCKED`, `UNAVAILABLE`.
+- **Errors:** `VALIDATION_ERROR` (including `date_range` and `amount_format`), `AUTH_REQUIRED`, `SESSION_EXPIRED`, `POLICY_BLOCKED`, `UNAVAILABLE`.
 
 ### 3.9 `explain_decline`
 
@@ -610,7 +620,8 @@ payload = {"v": 1, "sid": "<22 random base64url>", "sub": "<customer_id>", "iat"
     - `actions_taken`: up to 12 strings of up to 200 characters;
     - `evidence`: up to 30 unique `tc_` ids;
     - `open_questions`: up to 6 strings of up to 200 characters;
-  - optional `confirmation_id`, `candidate_transaction_ids` (up to 5) and `idempotency_key`.
+  - optional `confirmation_id`, `candidate_transaction_ids` (up to 5 unique) and `idempotency_key`.
+  - A repeated id in `evidence` or `candidate_transaction_ids` is dropped (the first one is kept) before validation, never a reason to refuse the safe fallback.
 - **The `reason_code` enum** is `[t.reason for t in handoff.triggers_in_order] + ["complaint_routing"]`:
   - `customer_status_restricted`, `suspected_card_compromise`, `card_block_request`, `explicit_human_request`, `tool_failure`;
   - `low_intent_confidence`, `no_match_after_clarification`, `outside_dispute_window`, `amount_above_threshold`;
@@ -627,7 +638,7 @@ payload = {"v": 1, "sid": "<22 random base64url>", "sub": "<customer_id>", "iat"
      - `customer_status_restricted` needs the session status to be restricted.
      - `amount_above_threshold` and `outside_dispute_window` need the attached draft's decision to contain the reason.
      - `no_match_after_clarification` needs the counter to show a clarification and a last search of `none`.
-     - `tool_failure` needs an `UNAVAILABLE` or `INTERNAL` result in this conversation.
+     - `tool_failure` needs an `UNAVAILABLE` or `INTERNAL` result in this conversation. Without one it is `inconsistent` from the model, but `not_verifiable` from the runtime (`caller: runtime`), which also hands off on failures the service cannot see, such as the model endpoint failing.
      - Every other reason is `not_verifiable` (customer words).
      - The result is `consistent`, `inconsistent` or `not_verifiable`, recorded on the ticket and in the audit.
   7. **Routing.**
@@ -690,6 +701,7 @@ Every error is `{"code", "message", "retryable", "details"}`. The rules:
   - 200 per conversation;
   - the authentication limits of §2.2;
   - `get_policy_info`: 20 per conversation.
+  - `config.demo_config()` returns a `demo` config with higher limits for a long live demo: 50 challenges per document per hour and 400 calls per session per 5 minutes (`DEMO_LIMITS`). The defaults of every env, `demo` included, are unchanged.
 
 ## 5. Policy enforcement map
 
@@ -702,7 +714,7 @@ Every rule is enforced in the service, by a `dispute_policy` function:
 | Ownership (`eligibility.ownership`) | Repository predicate plus `is_eligible` (`not_owned`) | Every customer-scoped read and write |
 | Only events at or before now | `candidate_transactions`, `recent_movements`, the `until_ts` predicate | Every transaction read |
 | Eligible statuses and types | `is_eligible`, `eligible_types` | `check_dispute_eligibility`, `prepare`, `create` |
-| Matching (lookback, ±1%, ±2 days, merchant 0.8, `max_candidates_shown`) | `candidate_transactions`, `match_transactions`, `merchant_similarity` | `find_candidate_transactions` |
+| Matching (lookback, ±1%, ±2 days, inclusive date range, merchant 0.8, `max_candidates_shown`) | `candidate_transactions`, `match_transactions`, `merchant_similarity` | `find_candidate_transactions` |
 | One clarification, then handoff | `requires_handoff` (`no_match_after_clarification`) plus the service counter | `find_candidate_transactions` |
 | Handoff triggers (restricted, compromise, window, amount) | `handoff_reasons`, `requires_handoff` | Gate (§3.0), `prepare`, `create` (`POLICY_BLOCKED`) |
 | `never_from_claim` | `build_case` (amount, currency, date from the transaction) | `prepare`, `create`: no amount argument exists |
@@ -797,7 +809,7 @@ Gold already drops most of these (`gold_tables.json` privacy rule). The service 
   - `session_id_hash` is `sha256(sid)[:16]`.
   - `customer_key` is `HMAC(k_audit, customer_id)[:16]`, which links records without storing the id.
   - `result_summary` holds ids, counts and flags only, never amounts, merchants or free text.
-  - `args_redacted`: document numbers and codes become `[REDACTED]`, idempotency keys are hashed, confirmation signatures are cut, and package texts are scrubbed (§6) and cut to 200 characters.
+  - `args_redacted`: document numbers and codes become `[REDACTED]`, idempotency keys are hashed, confirmation signatures are cut, and package texts and text hints (`merchant`, an `amount` given as text) are scrubbed (§6) and cut to 200 characters.
 - **Sinks:**
   - `JsonlAuditSink`: `data/bank_tools/audit/tool_audit_<YYYYMMDD>.jsonl`, one file per wall-clock day.
   - `DatabricksAuditSink`: buffered named-parameter inserts into `workspace.ops.tool_audit`, flushed every 20 records and at the end of each conversation. Nested fields are stored as JSON strings, and the table is clustered by `recorded_at` date.
@@ -820,7 +832,9 @@ Gold already drops most of these (`gold_tables.json` privacy rule). The service 
 | Challenges | Deleted at expiry |
 | Drafts | Session expiry plus 24 h |
 | Idempotency records | 24 h |
-| Counters, tool-call index | End of conversation (in memory) |
+| Rate-limit counters | The end of the last call's window (a counter without a window is kept) |
+| Clarification counters | 24 h after their last update |
+| Tool-call index | End of conversation (in memory) |
 | Revoked session ids | Until the token's `exp` |
 | Movements with a human, card-compromise reports (§3.12 step 7) | 24 h |
 | Cases and tickets | Mock records: the per-run store is discarded in `test` and `eval`; `ops.dispute_cases` and `ops.handoff_tickets` rows carry `env` and are purged with `python -m src.bank_tools.retention --purge-env demo` |
@@ -976,7 +990,7 @@ Tool-level checks, independent of the model's wording:
 | `BANK_TOOLS_CATALOG` / `BANK_TOOLS_GOLD_SCHEMA` / `BANK_TOOLS_OPS_SCHEMA` | `workspace` / `gold` / `ops` | Identifiers checked against `^[a-z_][a-z0-9_]*$` |
 | `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, `DATABRICKS_CONFIG_PROFILE`, `DATABRICKS_WAREHOUSE_ID`, `DATABRICKS_CLI` | from the environment or the CLI profile (§1.5) | Databricks mode |
 
-**Constructor-only settings** (`Config` fields, not environment variables): `id_seed` (20261005), the rate limits of §4, `attempt_deadline_s` (8) and `call_deadline_s` (20), `foreign_probe_limit` (3).
+**Constructor-only settings** (`Config` fields, not environment variables): `id_seed` (20261005), the rate limits of §4, `attempt_deadline_s` (8) and `call_deadline_s` (20), `foreign_probe_limit` (3). `demo_config(environ=None, **overrides)` builds a `demo` config from the environment with the demo limits of §4; like any `demo` config it refuses the DEV ONLY keys.
 
 **Dev defaults.** With `test`, `eval` or `dev` and no key set, the service uses the documented dev defaults and logs one warning. Lines to add to `.env.example`:
 
@@ -1010,7 +1024,8 @@ DATABRICKS_WAREHOUSE_ID=
    - A value such as `"TRX-' OR 1=1 --"` fails validation, and no SQL text contains a value (static check of `repository/sql.py` plus a test that every Databricks call sends `parameters`).
 4. **Clock.** Over the whole e2e replay, no output contains an `event_ts` later than `meta.now`. A movement after now gives `NOT_FOUND` in `prepare`.
 5. **Policy parity.**
-   - For every scenario turn with a claim, `find_candidate_transactions` equals `dispute_policy.match_transactions` on the same data.
+   - For every scenario turn with a claim, `find_candidate_transactions` equals `dispute_policy.match_transactions` on the same data. The fixture tests also cover date ranges, and amounts written as text in CO, AR and MX (§3.8).
+   - A unique match for `decline_inquiry` gives `next_action = explain_decline`; for `dispute`, `confirm_candidate`.
    - `prepare` fields equal `build_case`.
    - Gold `dispute_eligible_*` and `above_handoff_threshold` agree with `is_eligible` and `handoff_reasons`. This is checked in the Gold build on a 4,457-row sample (`policy:flags_match_reference_sample`), not by a test of this suite; the service never uses the flags for a decision.
 6. **Confirmation.** All of these give `CONFIRMATION_REQUIRED`:
@@ -1037,11 +1052,12 @@ DATABRICKS_WAREHOUSE_ID=
     - Package limits are enforced, and PII is scrubbed and counted.
     - Evidence ids from another conversation are dropped.
     - The draft is attached as `pending_human_review`.
-    - `reason_check` holds for each reason.
+    - `reason_check` holds for each reason, including `tool_failure` from the runtime (`not_verifiable`).
+    - Repeated evidence and candidate ids are dropped, not refused.
     - An unauthenticated or expired call gives an unbound ticket without a draft.
     - A ticket write failure gives `static_fallback`.
 11. **Scripted replay.** 280 of 280 scenarios reproduce the outcome, handoff reason, transaction and case fields at the tool level (§10). Audit attempts match `policy_trace`.
-12. **Repository parity.** `LocalRepository` (Gold export) and `DatabricksRepository` return identical `for_model()` data, without `meta`, for the overview, products, recent movements and candidate search on 5 panel customers (4 active, 1 restricted).
+12. **Repository parity.** `LocalRepository` (Gold export) and `DatabricksRepository` return identical `for_model()` data, without `meta`, for the overview, products, recent movements and candidate search on 5 panel customers (4 active, 1 restricted). Offline, with a faked Statement Execution API, `DatabricksRepository.store_rows` returns the same rows as `LocalRepository.store_rows`, filtered by env with a named parameter.
 13. **Audit.** There is exactly one record per call, including rejected ones. JSONL lines are valid, and `latency_ms`, `trace_id` and `policy_version` are present.
 14. **Security review.** `tests/bank_tools/test_security_redteam.py` reproduces each finding of the review (report 05, "Security review") and replays the attacks the service resisted.
 

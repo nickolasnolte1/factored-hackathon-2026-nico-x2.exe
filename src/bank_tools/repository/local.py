@@ -121,9 +121,10 @@ class LocalRepository(Repository):
         return {"ok": True, "source": "local:" + meta.get("source", "unknown"),
                 "snapshot_as_of": meta.get("snapshot_as_of")}
 
-    # -- test and harness helpers (not part of the interface) ------------------------------------------------
+    # -- console, test and harness helpers (not part of the tool interface) -----------------------------------
     def store_rows(self, table):
-        """All rows of a store table (dispute_cases or handoff_tickets), normalized."""
+        """All rows of a store table (dispute_cases or handoff_tickets), normalized. DatabricksRepository has the
+        same helper, filtered by env."""
         if table not in ("dispute_cases", "handoff_tickets"):
             raise ValueError(table)
         return self._all(self._store, "SELECT * FROM " + table + " ORDER BY created_at", {}, table)

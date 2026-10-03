@@ -108,6 +108,8 @@ def case_statements(case_columns):
                       " AND transaction_id = :transaction_id AND dispute_type = :dispute_type"
                       " AND created_via = 'chat' AND status IN ('Open', 'In Process')"
                       " ORDER BY created_at, case_id LIMIT 1"),
+        "all": ("SELECT " + cols + " FROM {ops}.dispute_cases WHERE env = :env"
+                " ORDER BY created_at, recorded_at, case_id"),
     }
 
 
@@ -118,6 +120,8 @@ def ticket_statements(ticket_columns):
         "get": "SELECT " + cols + " FROM {ops}.handoff_tickets WHERE ticket_id = :ticket_id AND env = :env",
         "get_for_customer": ("SELECT " + cols + " FROM {ops}.handoff_tickets"
                              " WHERE ticket_id = :ticket_id AND customer_id = :customer_id AND env = :env"),
+        "all": ("SELECT " + cols + " FROM {ops}.handoff_tickets WHERE env = :env"
+                " ORDER BY created_at, recorded_at, ticket_id"),
     }
 
 

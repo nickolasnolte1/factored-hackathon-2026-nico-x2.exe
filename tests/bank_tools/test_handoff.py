@@ -47,7 +47,6 @@ def test_package_requires_every_field(bank, missing):
     {"request_summary": "corto"},
     {"verified_facts": "un hecho"},
     {"evidence": ["call-1"]},
-    {"evidence": ["tc_0123456789abcdef", "tc_0123456789abcdef"]},
     {"transcript": "Cliente: hola\nAgente: hola"},
 ])
 def test_package_shape_and_limits_are_enforced(bank, change):
@@ -201,6 +200,44 @@ def test_tool_failure_reason_is_consistent_after_an_unavailable_result(make_bank
     expect_error(env, "UNAVAILABLE", handoff_reason="tool_failure", next_action="handoff")
     data = conv.ok("handoff_to_human", hz.handoff_args("tool_failure", hz.package(evidence=[env["meta"]["tool_call_id"]])))
     assert data["reason_check"] == "consistent" and data["dropped_evidence"] == []
+
+
+def test_runtime_tool_failure_handoff_is_not_verifiable(bank):
+    """The runtime hands off when the model endpoint fails, a failure the service never sees: neither consistent nor
+    inconsistent. The same reason from the model, with no failed call, stays inconsistent."""
+    conv = bank.customer(fx.C1)
+    runtime = conv.ok("handoff_to_human", hz.handoff_args("tool_failure"), caller="runtime")
+    assert runtime["verified"] is True and runtime["reason_check"] == "not_verifiable"
+    _, row = _stored_text(bank, runtime["ticket_id"])
+    assert row["reason_check"] == "not_verifiable"
+    model = bank.customer(fx.C1).ok("handoff_to_human", hz.handoff_args("tool_failure"))
+    assert model["reason_check"] == "inconsistent"
+
+
+def test_runtime_tool_failure_handoff_is_consistent_after_a_failed_call(make_bank):
+    bank = make_bank(faults=[{"tool": "get_transactions", "type": "timeout", "failing_attempts": 99}])
+    conv = bank.customer(fx.C1)
+    expect_error(conv.call("list_recent_transactions"), "UNAVAILABLE")
+    data = conv.ok("handoff_to_human", hz.handoff_args("tool_failure"), caller="runtime")
+    assert data["reason_check"] == "consistent"
+
+
+def test_repeated_evidence_and_candidate_ids_are_dropped_not_refused(bank):
+    """A handoff is the safe fallback: the same id twice is kept once instead of failing validation."""
+    conv = bank.customer(fx.C1)
+    tc = conv.call("find_candidate_transactions", {"purpose": "dispute", "hints": {"merchant": "Super Ahorro"}})[
+        "meta"]["tool_call_id"]
+    env = conv.call("handoff_to_human", hz.handoff_args(
+        "explicit_human_request", hz.package(evidence=[tc, tc, tc]),
+        candidate_transaction_ids=[fx.T["super"], fx.T["super"].lower(), fx.T["uber_a"]]))
+    data = expect_ok(env)
+    assert data["verified"] is True and data["dropped_evidence"] == [] and data["truncated_fields"] == []
+    _, row = _stored_text(bank, data["ticket_id"])
+    verified = json.loads(row["service_verified_json"])
+    assert [e["tool_call_id"] for e in verified["evidence"]] == [tc]
+    assert [c["transaction_id"] for c in verified["candidates"]] == [fx.T["super"], fx.T["uber_a"]]
+    args = bank.audit_for(env)["args_redacted"]
+    assert args["package"]["evidence"] == [tc] and len(args["candidate_transaction_ids"]) == 2
 
 
 def test_unauthenticated_handoff_is_unbound(bank):

@@ -8,7 +8,7 @@ import json
 import sqlite3
 import threading
 
-from .clock import iso
+from .clock import from_epoch, iso
 
 
 class StateStore:
@@ -81,7 +81,8 @@ class StateStore:
 
 
 class RateLimiter:
-    """Sliding-window counters on the service clock (section 4)."""
+    """Sliding-window counters on the service clock (section 4). A bucket expires with its last stamp's window, so
+    purge() drops the counters of ended conversations and sessions."""
 
     def __init__(self, state):
         self.state = state
@@ -94,7 +95,7 @@ class RateLimiter:
         if len(stamps) >= limit:
             return max(1, int(stamps[0] + window_s - now_epoch)) if window_s else 3600
         stamps.append(now_epoch)
-        self.state.put("rate", bucket, stamps)
+        self.state.put("rate", bucket, stamps, expires_at=from_epoch(now_epoch + window_s) if window_s else None)
         return None
 
     def peek(self, bucket, limit, window_s, now_epoch):

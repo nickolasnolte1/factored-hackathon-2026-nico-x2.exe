@@ -5,6 +5,7 @@ Offline: SQL constants use named parameters only, and every Statement Execution 
 Live (BANK_TOOLS_TEST_DATABRICKS=1, plus DATABRICKS_WAREHOUSE_ID and a CLI profile or host/token): reads through
 workspace.gold, and parity with the local panel snapshot when it exists.
 """
+import importlib
 import json
 import os
 import re
@@ -95,6 +96,75 @@ def test_statement_requests_carry_named_parameters_and_never_the_document_number
         assert isinstance(call["json"].get("parameters", []), list)
         assert document_hash not in call["json"]["statement"]
         assert call["json"].get("warehouse_id") == "test-warehouse"
+
+
+def _warehouse_text(kind, value):
+    """A value as the Statement Execution API returns it in JSON_ARRAY format: text, or null."""
+    if value is None:
+        return None
+    if kind == "boolean":
+        return "true" if value else "false"
+    if kind.startswith("decimal"):
+        return f"{value:.2f}"
+    if kind == "timestamp":
+        return value + ".000Z"
+    return str(value)
+
+
+class _FakeWarehouse:
+    """A requests session standing in for the SQL warehouse: CREATE succeeds, and a SELECT of an ops table returns
+    the given rows whose env equals the :env parameter (what the env predicate does on the warehouse)."""
+
+    def __init__(self, rows):
+        self.rows, self.bodies = rows, []
+
+    def request(self, method, url, json=None, headers=None, timeout=None):
+        self.bodies.append(json)
+        statement = json["statement"]
+        table = next((t for t in self.rows if "." + t + " " in statement + " "), None)
+        if not statement.lstrip().upper().startswith("SELECT") or table is None:
+            return _FakeResponse({"statement_id": "stmt-ddl", "status": {"state": "SUCCEEDED"}, "manifest": {},
+                                  "result": {"data_array": []}})
+        env = next(p["value"] for p in json["parameters"] if p["name"] == "env")
+        base = importlib.import_module("src.bank_tools.repository.base")
+        types = base.COLUMN_TYPES[table]
+        data = [[_warehouse_text(types[c], r[c]) for c in types] for r in self.rows[table] if r["env"] == env]
+        return _FakeResponse({"statement_id": "stmt-rows", "status": {"state": "SUCCEEDED"},
+                              "manifest": {"schema": {"columns": [{"name": c} for c in types]}, "total_chunk_count": 1},
+                              "result": {"data_array": data}})
+
+
+def test_store_rows_on_databricks_equal_the_local_helper(make_bank):
+    """The agent console reads cases and tickets through store_rows on either repository (review finding S15): the
+    Databricks one returns the same normalized rows as LocalRepository, for the configured env only."""
+    bank = make_bank()
+    conv = bank.customer(fx.C1)
+    draft = conv.ok("prepare_dispute_case", {"transaction_id": fx.T["super"], "intent": "dispute_unrecognized_charge",
+                                             "language": "es"})
+    conv.next_turn()
+    conv.ok("create_dispute_case", {"confirmation_id": draft["confirmation_id"], "transaction_id": fx.T["super"],
+                                    "customer_confirmed": True, "idempotency_key": hz.new_key()})
+    conv.ok("handoff_to_human", hz.handoff_args("explicit_human_request"))
+    local = {t: bank.repo.store_rows(t) for t in ("dispute_cases", "handoff_tickets")}
+    assert [len(rows) for rows in local.values()] == [1, 1] and local["dispute_cases"][0]["env"] == "test"
+    other_env = {"dispute_cases": dict(local["dispute_cases"][0], case_id="DSP-OTHERENV0001", env="demo"),
+                 "handoff_tickets": dict(local["handoff_tickets"][0], ticket_id="HND-OTHERENV0001", env="demo")}
+    warehouse = _FakeWarehouse({t: rows + [other_env[t]] for t, rows in local.items()})
+
+    databricks = importlib.import_module("src.bank_tools.repository.databricks")
+    creds = databricks.CliCredentials(host="https://workspace.example.invalid", token="test-only-not-a-token")
+    client = databricks.StatementClient("test-warehouse", creds, session=warehouse)
+    repo = databricks.DatabricksRepository(client, env="test")
+    for table, rows in local.items():
+        assert repo.store_rows(table) == rows, table
+    selects = [b for b in warehouse.bodies if b["statement"].startswith("SELECT")]
+    assert len(selects) == 2
+    for body in selects:
+        assert " env = :env" in body["statement"] and "'test'" not in body["statement"]
+        assert {"name": "env", "value": "test", "type": "STRING"} in body["parameters"]
+        assert "workspace.ops." in body["statement"]
+    with pytest.raises(ValueError):
+        repo.store_rows("tool_audit")
 
 
 # ---------------------------------------------------------------- live checks (skipped by default)

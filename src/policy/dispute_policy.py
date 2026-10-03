@@ -177,7 +177,8 @@ def candidate_transactions(transactions, customer_id, now, intent=None, pol=None
 
 
 def claim_has_hints(claim):
-    return any((claim or {}).get(k) not in (None, "") for k in ("amount", "date", "merchant", "channel", "txn_type"))
+    return any((claim or {}).get(k) not in (None, "")
+               for k in ("amount", "date", "date_from", "date_to", "merchant", "channel", "txn_type"))
 
 
 def _matches(claim, t, pol):
@@ -191,6 +192,10 @@ def _matches(claim, t, pol):
     if claim.get("date") is not None:
         if abs((as_date(t["event_date"]) - as_date(claim["date"])).days) > m["date_tolerance_days"]:
             return False
+    if claim.get("date_from") is not None and as_date(t["event_date"]) < as_date(claim["date_from"]):
+        return False
+    if claim.get("date_to") is not None and as_date(t["event_date"]) > as_date(claim["date_to"]):
+        return False
     if claim.get("merchant"):
         if not t.get("merchant_name") or merchant_similarity(claim["merchant"], t["merchant_name"]) < m["merchant_min_similarity"]:
             return False
@@ -202,11 +207,13 @@ def _matches(claim, t, pol):
 
 
 def match_transactions(claim, candidates, pol=None):
-    """Match a structured claim {amount, currency, date, merchant, txn_type, channel} against candidates.
+    """Match a structured claim {amount, currency, date, date_from, date_to, merchant, txn_type, channel} against
+    candidates.
 
     Returns {status: unique|multiple|none|no_hints, matches: [transaction_id, ...]} (candidates' order kept).
-    Amount within +-amount_tolerance_pct of the transaction amount, date within +-date_tolerance_days,
-    merchant by similarity; every hint given must hold. The customer must still confirm a unique match."""
+    Amount within +-amount_tolerance_pct of the transaction amount, date within +-date_tolerance_days, event date
+    inside the inclusive range date_from..date_to (either bound may be absent, no tolerance), merchant by
+    similarity; every hint given must hold. The customer must still confirm a unique match."""
     pol = _pol(pol)
     if not claim_has_hints(claim):
         shown = [t["transaction_id"] for t in candidates[:pol["transaction_matching"]["max_candidates_shown"]]]

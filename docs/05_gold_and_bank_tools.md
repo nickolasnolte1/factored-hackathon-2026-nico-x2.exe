@@ -198,7 +198,7 @@ _The mock banking service the agent calls: [`src/bank_tools/`](../src/bank_tools
   - a read-back of the stored case before `verified: true`.
 - **Safe fallback.** The service blocks the write when the policy requires a human, or when a tool still fails after bounded retries. The agent then hands off with a structured package, never a transcript.
 - **Results.**
-  - 308 tests: the 267 acceptance tests and 41 security tests. The 305 offline tests pass. The 3 live Databricks tests were last run before the `card_block_request` reason was added, when 306 of 306 passed.
+  - 397 tests: 266 of the original acceptance tests, 41 security tests, and 90 tests added with the changes of 2026-10-03 (section 20). The 394 offline tests pass. The 3 live Databricks tests were last run before the `card_block_request` reason was added, when 306 of 306 passed.
   - A red-team review (section 24) found 12 issues, 1 high, 5 medium and 6 low. All are fixed and covered by tests.
   - The model-free scenario replay passes 280 of 280 e2e scenarios, with 6,423 tool-level checks.
   - A second export of the local snapshot from Gold gives identical checksums.
@@ -232,6 +232,7 @@ flowchart LR
   - `LocalRepository` reads a read-only SQLite snapshot of Gold and keeps cases and tickets in a separate store (in memory by default). Every test and every replayed scenario therefore starts clean.
   - `DatabricksRepository` reads `workspace.gold` through the SQL Statement Execution API. It uses named parameters only, and the catalog and schema names are the only text placed into SQL. It writes `workspace.ops.dispute_cases`, `ops.handoff_tickets` and `ops.tool_audit`.
   - A live test checks that both return identical model envelopes (without `meta`) for 4 read tools (overview, products, recent movements, candidate search) on 5 panel customers.
+  - Both have `store_rows(table)`, which returns every case or ticket row (on Databricks, only the configured env's) for the human agent console. An offline test with a faked Statement Execution API checks that the two return the same rows.
 - **Modules.** See the [bank tools README](../src/bank_tools/README.md).
 
 ### 11. Identity and sessions
@@ -257,6 +258,7 @@ flowchart LR
 - **Rate limits.**
   - 3 challenges per conversation per 15 minutes, and 5 per document hash per hour (decoys count).
   - 40 tool calls per session per 5 minutes, 200 per conversation, and 20 `get_policy_info` calls per conversation.
+  - `config.demo_config()` gives a `demo` config with 50 challenges per document per hour and 400 calls per session per 5 minutes, so a long live demo that signs the same personas in again and again never hits `RATE_LIMITED`. The defaults of the other envs are unchanged.
 - **Trusted test session.**
   - `identity.issue_test_session(customer_id, authenticated_at, conversation_id)` exists only in `test` and `eval`, and is not a tool.
   - It issues a token through the same signer and validation path, and writes an audit record.
@@ -272,7 +274,7 @@ flowchart LR
 | 4 | `list_products` | model | required | none | Product ids, types, currency, `effective_status`, last 4 characters (null on collisions) |
 | 5 | `get_balance` | model | required | none | Balance, `balance_kind` (funds or outstanding debt), credit limit, `balance_as_of` (snapshot date) |
 | 6 | `list_recent_transactions` | model | required | none | Latest movements up to the clock (default 5), merchant as untrusted text, channel null when flagged |
-| 7 | `find_candidate_transactions` | model | required | clarification counter | `match_status` (unique, multiple, none, no_hints), up to 5 candidates, `next_action` |
+| 7 | `find_candidate_transactions` | model | required | clarification counter | `match_status` (unique, multiple, none, no_hints), up to 5 candidates, `next_action` (`explain_decline` for a unique declined movement) |
 | 8 | `explain_decline` | model | required | none | Code-table reason and ES/PT message; `offer_human` for unknown or inconsistent codes |
 | 9 | `check_dispute_eligibility` | model | required | none | Eligibility, reason, 90-day window, `handoff_required` (the threshold is never shown) |
 | 10 | `prepare_dispute_case` | model | required | draft (state only) | Verified facts, case preview, policy decision, signed `confirmation_id` |
@@ -312,7 +314,9 @@ flowchart LR
 
 ### 14. Confirmation and verified read-back
 
-1. `find_candidate_transactions` returns a unique match (amount ±1%, date ±2 days, merchant similarity of at least 0.8, all from the policy).
+1. `find_candidate_transactions` returns a unique match (amount ±1%, date ±2 days or an inclusive period such as "en abril", merchant similarity of at least 0.8, all from the policy).
+   - The amount may come as the customer wrote it. The service reads it the same way in every country, since money amounts never have three decimals: one separator followed by three digits groups thousands ("109.686" is 109686, "9.951" is 9951, "$1'985.843" is 1985843), and one followed by two digits is the decimal mark ("494.11", "494,11"). An explicit code or symbol (USD, COP, ARS, MXN, BRL, R$, US$, AR$, MX$, COL$) sets the currency; a bare "$" does not (contract section 3.8).
+   - For a question about a declined payment, a unique match returns `next_action = explain_decline`: the explanation only reads, so there is no confirmation step.
 2. `prepare_dispute_case` returns:
    - the verified facts, taken from the row: amount, currency and date never come from the claim;
    - the case preview from `build_case` and the policy decision;
@@ -344,12 +348,13 @@ flowchart LR
   - `evidence`: up to 30 `tool_call_id`s;
   - `open_questions`: up to 6 items.
   - There is no transcript field.
+  - A repeated evidence or candidate id is dropped, not refused: the handoff is the safe fallback.
 - **What the service adds** (`service_verified`):
   - **Evidence.** Each evidence id must come from this conversation and from a call made for the ticket's customer (or with no session). For each one, the service attaches its own redacted record of that call: tool, outcome, error code, result summary, policy decision.
   - **Draft.** With a valid `confirmation_id`, the verified draft is attached with status `pending_human_review`.
   - **Candidates.** Candidate movements are re-read with ownership and clock checks.
   - **Session.** The authentication method and time.
-- **Reason check.** The service compares the stated reason with what it observed and records `consistent`, `inconsistent` or `not_verifiable`. The check never blocks a handoff.
+- **Reason check.** The service compares the stated reason with what it observed and records `consistent`, `inconsistent` or `not_verifiable`. The check never blocks a handoff. A `tool_failure` handoff with no failed call in the conversation is `inconsistent` from the model, but `not_verifiable` from the runtime, which also hands off when the model endpoint fails.
 - **Text hygiene.** Free text is PII-scrubbed (`redactions` counts the replacements). Text over the limits is cut and listed in `truncated_fields`.
 - **Routing.**
   - Queues: `card_security`, `account_restrictions`, `complaints`, or `disputes` otherwise.
@@ -457,14 +462,24 @@ The 267 acceptance tests in [`tests/bank_tools/`](../tests/bank_tools/) (every f
 | `test_00_contract_static.py` | 10 | Schemas against the policy and Gold; fixture sanity |
 | `test_access_control.py` | 30 | Foreign ids equal unknown ids, probe audit and revocation, restricted gate |
 | `test_authentication.py` | 26 | Document + OTP, decoys, locking, token tampering, re-authentication, expiry |
-| `test_databricks.py` | 5 (3 live) | Named parameters only; live decoy, Gold reads, local vs Gold parity |
+| `test_amounts.py` | 70 | Amounts written as text: one reading for every country, refused texts, explicit currencies and symbols, no customer data read |
+| `test_databricks.py` | 6 (3 live) | Named parameters only; `store_rows` equal to the local one, by env; live decoy, Gold reads, local vs Gold parity |
 | `test_dispute_flow.py` | 33 | Prepare, later-turn confirmation, idempotency, policy blocks, read-back |
-| `test_errors_faults_audit.py` | 34 | Error catalog, bounded retries, fault types, rate limits, one audit record per call |
-| `test_handoff.py` | 50 | Package limits, scrubbing, evidence, draft, reason checks, routing, dedupe, fallback |
+| `test_errors_faults_audit.py` | 38 | Error catalog, bounded retries, fault types, rate limits (and their expiry) and the demo limits, one audit record per call |
+| `test_handoff.py` | 52 | Package limits, scrubbing, evidence, repeated ids, draft, reason checks, routing, dedupe, fallback |
 | `test_minimization.py` | 11 | Allow-list, no personal or internal values, untrusted text |
-| `test_reads.py` | 68 | Overview, products, balances, movements, matching, counter, declines, eligibility, policy text |
+| `test_reads.py` | 80 | Overview, products, balances, movements, matching (date ranges included), counter, declines, eligibility, policy text |
 | `test_security_redteam.py` | 41 | The 12 findings of the security review (section 24) and the attacks the service resisted |
-| **Total** | **308** | 305 offline, all pass (about 3 s). The 3 live tests (`BANK_TOOLS_TEST_DATABRICKS=1`, about 40 s) were last run before `card_block_request` was added, when 306 of 306 passed |
+| **Total** | **397** | 394 offline, all pass (about 3 s). The 3 live tests (`BANK_TOOLS_TEST_DATABRICKS=1`, about 40 s) were last run before `card_block_request` was added, when 306 of 306 passed |
+
+**Changes of 2026-10-03** (after the app review and the first agent exam on the dev split). The tools side of the fixes changed the contract, so the tests changed with it. These 90 tests were written with the implementation in view, unlike the original acceptance tests:
+
+- `find_candidate_transactions` returns `explain_decline` for a unique declined movement (the exam's agent asked the customer to confirm a movement it only had to explain). The two decline cases of the matching test now expect it.
+- Amounts written as text and date ranges are new hints (the exam's agent read "$1'985.843" as 1985.843 and "ARS 109.686" as 109.686). The test that refused a text amount as a `type` error now uses a boolean.
+- A second review dropped the per-country reading of amounts: a Portuguese speaker in Mexico writes "9.951" for 9951, so one separator followed by three digits now groups thousands everywhere (money amounts never have three decimals), and the tool no longer reads the customer's country. `AR$`, `MX$`, `COL$` and `U$D` set the currency too.
+- Rate-limit counters now expire with their window, and clarification counters 24 hours after their last update, so a long-running app does not keep the counters of ended conversations.
+- Repeated evidence ids are dropped instead of refused, so the matching case left the package-shape test.
+- A `tool_failure` handoff from the runtime with no failed call is `not_verifiable`; `DatabricksRepository.store_rows` and `demo_config` are new.
 
 **Decisions recorded during verification** (the contract decides which side is wrong):
 

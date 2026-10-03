@@ -252,6 +252,16 @@ class DatabricksRepository(Repository):
         except Exception as exc:  # noqa: BLE001 - health never raises
             return {"ok": False, "source": "databricks", "snapshot_as_of": None, "error": type(exc).__name__}
 
+    # -- console and harness helper (not part of the tool interface) -------------------------------------------
+    def store_rows(self, table):
+        """All rows of an ops table (dispute_cases or handoff_tickets) of the configured env, normalized: the same
+        output as LocalRepository.store_rows. Used by the human agent console."""
+        statements = {"dispute_cases": self._case_sql, "handoff_tickets": self._ticket_sql}
+        if table not in statements:
+            raise ValueError(table)
+        self.ensure_ops_tables()
+        return self._rows(statements[table]["all"], {"env": self.env}, table, deadline_s=30)
+
     def execute_statement(self, statement, params=None, deadline_s=60):
         """Run one statement from repository/sql.py (retention, audit sink)."""
         return self.client.execute(self._sql(statement), params, deadline_s)

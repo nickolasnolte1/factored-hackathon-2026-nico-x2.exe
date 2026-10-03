@@ -78,6 +78,19 @@ class PolicyRules(unittest.TestCase):
         self.assertEqual(dp.match_transactions({"amount": 250, "currency": "COP"}, c)["status"], "none")
         self.assertEqual(dp.match_transactions({}, c)["status"], "no_hints")
 
+    def test_match_date_range(self):
+        c = dp.candidate_transactions(TXNS, CID, NOW, UNREC)
+        self.assertEqual(dp.match_transactions({"date_from": "2025-03-11", "date_to": "2025-03-12"}, c)["matches"],
+                         ["T2", "T3"])
+        self.assertEqual(dp.match_transactions({"date_from": "2025-03-15"}, c)["matches"], ["T4", "T1"])
+        self.assertEqual(dp.match_transactions({"date_to": "2024-12-31"}, c)["matches"], ["T7"])
+        # no tolerance on a range, unlike the exact date (2025-03-13 +-2 days reaches both Uber rows)
+        self.assertEqual(dp.match_transactions({"date_from": "2025-03-13", "date_to": "2025-03-13",
+                                                "merchant": "uber"}, c)["status"], "none")
+        both = {"date": "2025-03-13", "date_from": "2025-03-12", "date_to": "2025-03-14"}  # every hint must hold
+        self.assertEqual(dp.match_transactions(both, c)["matches"], ["T2"])
+        self.assertTrue(dp.claim_has_hints({"date_to": "2025-03-01"}))
+
     def test_handoff_order_and_priority(self):
         big = TXNS[3]
         self.assertEqual(dp.requires_handoff({"transaction": big, "now": NOW}), (True, "amount_above_threshold"))

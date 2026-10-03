@@ -46,7 +46,8 @@ def test_arguments_are_normalized_before_validation(bank):
     ("get_balance", {"product_id": 123}, "type"),
     ("list_recent_transactions", {"limit": "five"}, "type"),
     ("list_recent_transactions", {"statuses": ["Refunded"]}, "enum"),
-    ("find_candidate_transactions", {"purpose": "dispute", "hints": {"amount": "100"}}, "type"),
+    ("find_candidate_transactions", {"purpose": "dispute", "hints": {"amount": True}}, "type"),
+    ("find_candidate_transactions", {"purpose": "dispute", "hints": {"amount": "cien"}}, "amount_format"),
     ("find_candidate_transactions", {"purpose": "dispute"}, "required"),
     ("create_dispute_case", {"confirmation_id": "CNF-AAAAAAAAAAAA." + "A" * 22, "transaction_id": fx.T["super"],
                              "customer_confirmed": "yes", "idempotency_key": "idem-0001"}, "type"),
@@ -81,6 +82,21 @@ def test_session_calls_are_rate_limited_on_the_service_clock(bank):
     expect_error(conv.call("list_products", {}), "RATE_LIMITED")
     bank.advance(301)
     conv.ok("list_products")
+
+
+def test_rate_counters_expire_with_their_window():
+    from datetime import timedelta
+
+    from src.bank_tools.clock import epoch, parse_dt
+    from src.bank_tools.state import RateLimiter, StateStore
+    state, now = StateStore(), parse_dt(fx.NOW)
+    limiter = RateLimiter(state)
+    limiter.hit("conv:c-1", 5, 300, epoch(now))
+    limiter.hit("no-window", 5, 0, epoch(now))
+    state.purge(now + timedelta(seconds=299))
+    assert state.count("rate") == 2
+    state.purge(now + timedelta(seconds=300))  # every stamp is out of the window: the counter goes
+    assert state.count("rate") == 1
 
 
 # ---------------------------------------------------------------- retries and fault injection
@@ -168,6 +184,52 @@ def test_read_only_mode_forbids_case_creation_but_keeps_handoff(make_bank):
     assert bank.cases() == []
     assert conv.ok("handoff_to_human", hz.handoff_args("explicit_human_request",
                                                        confirmation_id=draft["confirmation_id"]))["verified"] is True
+
+
+DEMO_KEYS = {"BANK_TOOLS_SESSION_KEY": "test-only-demo-session-key-0123456789abcdef",
+             "BANK_TOOLS_OTP_KEY": "test-only-demo-otp-key-0123456789abcdef0123"}
+
+
+def test_demo_config_raises_only_the_demo_limits():
+    config = hz._module("src.bank_tools.config")
+    default = config.Config.from_env({})
+    demo = config.demo_config(DEMO_KEYS)
+    assert demo.env == "demo"
+    assert demo.challenges_per_document > default.challenges_per_document
+    assert demo.session_calls_per_window > default.session_calls_per_window
+    unchanged = ("challenges_per_conversation", "conversation_calls", "policy_info_calls", "foreign_probe_limit",
+                 "session_window_s", "challenge_document_window_s")
+    assert all(getattr(demo, k) == getattr(default, k) for k in unchanged)
+    for env in ("test", "eval", "dev"):
+        cfg = config.Config.from_env({"BANK_TOOLS_ENV": env})
+        assert (cfg.challenges_per_document, cfg.session_calls_per_window) == (5, 40), env
+    with pytest.raises(ValueError):
+        config.demo_config({})  # demo still refuses the DEV ONLY default keys
+    assert config.demo_config(DEMO_KEYS, session_calls_per_window=60).session_calls_per_window == 60
+
+
+def test_a_long_demo_session_is_not_rate_limited(snapshot_path):
+    """Six sign-ins with the same document within the hour and more than 40 calls in one session window: both hit
+    RATE_LIMITED with the defaults, neither with the demo config."""
+    impl = hz.impl()
+    config = hz._module("src.bank_tools.config").demo_config(DEMO_KEYS)
+    repo = impl.LocalRepository(str(snapshot_path), store_path=":memory:")
+    service = impl.BankService(repo, impl.FixedClock(fx.NOW), impl.ListAuditSink(), None, config)
+    doc_type, number = fx.CUSTOMERS[fx.C1]["document"]
+    token = None
+    for i in range(6):
+        ctx = impl.ctx(f"c-demo-{i}", 1, "0" * 32, "runtime")
+        started = service.call_tool("start_authentication", {"document_type": doc_type, "document_number": number},
+                                    None, ctx)
+        assert started.ok, started.for_model()
+        challenge = started.data["challenge_id"]
+        verified = service.call_tool("verify_otp", {"challenge_id": challenge,
+                                                    "code": service.outbox.code_for(challenge)}, None, ctx)
+        assert verified.ok
+        token = hz.runtime_token(verified)
+    ctx = impl.ctx("c-demo-5", 2, "1" * 32, "model")
+    results = [service.call_tool("list_products", {}, token, ctx) for _ in range(41)]
+    assert all(r.ok for r in results), [r.code for r in results if not r.ok][:1]
 
 
 def test_direct_methods_follow_the_same_pipeline(bank):
