@@ -20,7 +20,9 @@ An AI-first customer service system for a LATAM retail bank (MX / CO / AR), buil
 | `src/scenarios/` | ES/PT scenario generator: Silver anchors, intent dataset and end-to-end agent scenarios ([README](src/scenarios/README.md)) |
 | `src/classifier/` | ES/PT intake intent classifier: keyword baseline, trained model (v1 text only; v2 text plus keyword features, the default), runtime adapter for the app and the final evaluation ([README](src/classifier/README.md)) |
 | `tests/classifier/` | Classifier tests on toy data, including checks that only the evaluation code reads the final test sets |
-| `eval/results/` | Classifier evaluation: every number with its 95% interval (`intent_classifier.json`) and the readable report (`intent_classifier.md`) |
+| `src/agent_eval/` | End-to-end exam of the real agent (`app/agent.py` with the served model) on the e2e scenarios: a fresh bank per scenario, scoring of what was written to the bank, reply checks, and an oracle mode that must score 280/280 ([README](src/agent_eval/README.md)) |
+| `tests/agent_eval/` | Tests of the exam's scoring on hand-made fixtures and on a scripted model |
+| `eval/results/` | Classifier evaluation (`intent_classifier.*`) and agent exam results per split and endpoint (`agent_e2e_<split>_<endpoint>.*`), every number with its 95% interval |
 | `docs/` | Data findings, EDA and workflow selection, test scenarios, Silver, Gold and bank tools (architecture and evaluation reports to come) |
 | `docs/03_test_scenarios.md` | Test scenarios (ES/PT): label provenance, splits and leakage checks, e2e categories, audit results |
 | `docs/04_silver_layer.md` | Silver layer: issue-to-rule mapping, checks, watermark/MERGE semantics, freshness, results |
@@ -69,6 +71,10 @@ python -m pytest tests/bank_tools -q                                # acceptance
 # Intent classifier (local; models/ is git-ignored)
 python -m src.classifier.train                                      # v2, bilingual; --view transfer for the ES-only model, --release v1 for v1
 python -m src.classifier.evaluate                                   # the only code that reads eval/holdout/; writes eval/results/
+
+# Agent exam (calls the model endpoint; transcripts in the git-ignored data/agent_eval/)
+python -m src.agent_eval.run --oracle --split all                  # scorer check without a model: must be 280/280
+python -m src.agent_eval.run --split dev                           # the real agent on the 140 dev scenarios
 ```
 
 Data lands in Unity Catalog under `workspace.{bronze,silver,gold,ops}`.
