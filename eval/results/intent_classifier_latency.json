@@ -1,0 +1,48 @@
+{
+  "model_v1": {
+    "model_version": "intent-clf-1.0.0",
+    "texts": "generated test split",
+    "n_texts": 1200,
+    "passes": 3,
+    "calls": 3600,
+    "wall_ms": {
+      "median": 0.7455,
+      "p95": 1.036925,
+      "max": 1.5784
+    },
+    "reported_latency_ms": {
+      "median": 1.0,
+      "p95": 1.0
+    },
+    "machine": {
+      "platform": "Windows-11-10.0.26200-SP0",
+      "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+      "python": "3.12.7",
+      "sklearn": "1.5.1"
+    },
+    "note": "depends on the machine and its load; kept apart so the main results stay byte-identical"
+  },
+  "model_v2": {
+    "model_version": "intent-clf-2.0.0",
+    "texts": "generated test split",
+    "n_texts": 1200,
+    "passes": 3,
+    "calls": 3600,
+    "wall_ms": {
+      "median": 1.5543,
+      "p95": 2.03564,
+      "max": 2.9285
+    },
+    "reported_latency_ms": {
+      "median": 2.0,
+      "p95": 2.0
+    },
+    "machine": {
+      "platform": "Windows-11-10.0.26200-SP0",
+      "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+      "python": "3.12.7",
+      "sklearn": "1.5.1"
+    },
+    "note": "depends on the machine and its load; kept apart so the main results stay byte-identical"
+  }
+}

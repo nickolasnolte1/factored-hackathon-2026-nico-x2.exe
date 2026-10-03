@@ -18,6 +18,9 @@ An AI-first customer service system for a LATAM retail bank (MX / CO / AR), buil
 | `app/` | Demo app: customer chat with secure sign-in, candidate and confirmation cards, per-turn trace, and the human agent console, over the bank tools with a Databricks-served LLM ([README](app/README.md)) |
 | `src/policy/` | Synthetic dispute-intake policy (`dispute_policy.json`, prepared for the project by an automated authoring process, not a real bank policy) and its deterministic reference implementation |
 | `src/scenarios/` | ES/PT scenario generator: Silver anchors, intent dataset and end-to-end agent scenarios ([README](src/scenarios/README.md)) |
+| `src/classifier/` | ES/PT intake intent classifier: keyword baseline, trained model (v1 text only; v2 text plus keyword features, the default), runtime adapter for the app and the final evaluation ([README](src/classifier/README.md)) |
+| `tests/classifier/` | Classifier tests on toy data, including checks that only the evaluation code reads the final test sets |
+| `eval/results/` | Classifier evaluation: every number with its 95% interval (`intent_classifier.json`) and the readable report (`intent_classifier.md`) |
 | `docs/` | Data findings, EDA and workflow selection, test scenarios, Silver, Gold and bank tools (architecture and evaluation reports to come) |
 | `docs/03_test_scenarios.md` | Test scenarios (ES/PT): label provenance, splits and leakage checks, e2e categories, audit results |
 | `docs/04_silver_layer.md` | Silver layer: issue-to-rule mapping, checks, watermark/MERGE semantics, freshness, results |
@@ -62,6 +65,10 @@ python -m src.bank_tools.snapshot --source gold --customers panel,sample:50 --wa
 python -m src.bank_tools.demo                                       # scripted happy path, prints every tool call
 python -m src.bank_tools.replay                                     # 280 e2e scenarios through the tools, no model
 python -m pytest tests/bank_tools -q                                # acceptance tests (BANK_TOOLS_TEST_DATABRICKS=1 adds live ones)
+
+# Intent classifier (local; models/ is git-ignored)
+python -m src.classifier.train                                      # v2, bilingual; --view transfer for the ES-only model, --release v1 for v1
+python -m src.classifier.evaluate                                   # the only code that reads eval/holdout/; writes eval/results/
 ```
 
 Data lands in Unity Catalog under `workspace.{bronze,silver,gold,ops}`.

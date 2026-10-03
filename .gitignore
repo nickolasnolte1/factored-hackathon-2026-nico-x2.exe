@@ -22,4 +22,5 @@ venv/
 # Tooling / artifacts
 .databricks/
 mlruns/
+models/
 .DS_Store

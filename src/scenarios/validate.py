@@ -18,7 +18,8 @@ Checks:
  11. transfer_view   the ES->PT view holds exactly ES train+dev and PT test
  12. e2e_categories  every e2e category has at least 10 scenarios per language
 
-This is the only module under src/ that reads eval/holdout/, and only to prove that nothing generated overlaps it.
+This module and src/classifier/evaluate.py (the final evaluation) are the only modules under src/ that read
+eval/holdout/; this one reads it only to prove that nothing generated overlaps it.
 The generator never imports it. Stdlib only.
 """
 import argparse

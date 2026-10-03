@@ -34,7 +34,7 @@ python -m unittest src.policy.test_dispute_policy
 python -m src.scenarios.validate                                               # leakage and holdout-overlap checks
 ```
 
-`validate` is the only module that reads `eval/holdout/`, and only to prove that no generated text or template is equal to, near or contained in a holdout message. `build` does not call it, so the generator never touches the holdout. Results and thresholds are in [report 03](../../docs/03_test_scenarios.md).
+`validate` and `src/classifier/evaluate.py` (the final evaluation) are the only modules that read `eval/holdout/`; `validate` reads it only to prove that no generated text or template is equal to, near or contained in a holdout message. `build` does not call it, so the generator never touches the holdout. Results and thresholds are in [report 03](../../docs/03_test_scenarios.md).
 
 Re-extracting with pinned versions reproduces `anchors.jsonl` and `panel.jsonl` byte for byte, as long as those Delta versions are retained.
 
