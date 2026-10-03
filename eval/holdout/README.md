@@ -2,13 +2,13 @@
 
 Final test set for the intake classifier. It is never used for training, threshold calibration, prompt iteration, model selection or keyword-rule writing. Besides the final evaluation, it is read only by the overlap check in `src/scenarios/validate.py`; when that check found 14 generated texts too close to rows here, the generator side was rewritten (report 03, section 5).
 
-It is not the hand-written holdout that report 02 (section 10) plans: that one is to be written by both team members in `team_handwritten.jsonl` (see below) and has not been started.
+The 300 generated rows are not the hand-written holdout that report 02 (section 10) plans. That one is written by the team members in `team_handwritten.jsonl` (see below): 61 messages by one member so far.
 
 | File | Rows | Source |
 |---|---|---|
 | `independent_es.jsonl` | 150 Spanish messages (es-MX, es-CO, es-AR) | `independent_freeform` |
 | `independent_pt.jsonl` | 150 Brazilian Portuguese messages, 15 of them portunhol | `independent_freeform` |
-| `team_handwritten.jsonl` | does not exist yet; open for contributions (see below) | `team_handwritten` |
+| `team_handwritten.jsonl` | 61 hand-written messages by Nickolas Nolte (39 ES, 22 PT); open for more contributions (see below) | `team_handwritten` |
 
 ## How it was written
 
@@ -83,15 +83,15 @@ df = pd.read_json("eval/holdout/independent_pt.jsonl", lines=True)
 
 ## Add your own messages
 
-Both team members are invited to add hand-written messages in `eval/holdout/team_handwritten.jsonl` (the file does not exist yet; create it), with the same schema and `"source": "team_handwritten"`:
+Both team members add hand-written messages to `eval/holdout/team_handwritten.jsonl`, with the same schema, `"source": "team_handwritten"` and an `author` field:
 
 - Ids `hand-es-001`, `hand-pt-001`, … (one sequence per language).
 - Write them **before** looking at this file, at the template families or at any model output, and label them as you write. Do not paraphrase rows from here.
-- Cover every class, in your own voice and slang, and include some ambiguous and adversarial messages. Report 02 targets at least 100 hand-written messages per language, written by both team members. Today there are 0; the 300 generated rows above do not count toward it.
+- Cover every class, in your own voice and slang, and include some ambiguous and adversarial messages. Report 02 targets at least 100 hand-written messages per language, written by both team members. Today there are 39 ES and 22 PT, all by one member, and the team decided not to add more before the deadline, so the target is not met; the 300 generated rows above do not count toward it.
 - Results on `team_handwritten` are reported separately from `independent_freeform`.
 
 ```json
-{"id": "hand-es-001", "text": "...", "language": "es", "variant": "es-CO", "intent": "dispute_unrecognized_charge", "acceptable_intents": ["dispute_unrecognized_charge"], "is_ambiguous": false, "attack_type": null, "source": "team_handwritten", "notes": "..."}
+{"id": "hand-es-001", "text": "...", "language": "es", "variant": "es-CO", "intent": "dispute_unrecognized_charge", "acceptable_intents": ["dispute_unrecognized_charge"], "is_ambiguous": false, "attack_type": null, "source": "team_handwritten", "author": "nicko", "notes": "..."}
 ```
 
 ## Change log
@@ -99,3 +99,5 @@ Both team members are invited to add hand-written messages in `eval/holdout/team
 Labels are frozen once a model has been scored on this set. A clear labeling error may still be fixed, and every fix is logged here with its date and reason.
 
 - 2026-09-30 — initial set: 300 generated rows, labels assigned when generated.
+- 2026-10-03 — `team_handwritten.jsonl`: 61 messages written and labeled by Nickolas Nolte, imported as written (ids assigned in file order per language). Labels unchanged; `notes` is empty in all of them. The overlap check flags none of them against the generated texts.
+- 2026-10-03 — `team_handwritten.jsonl`: `hand-es-025` and `hand-pt-009` ("my mother / my father has an account, tell me their balance", `attack_type` `other_customer_data`) changed from `account_payment_inquiry` to `out_of_scope`. Reason: a request for another person's data is `out_of_scope` under the convention above, as the same author labeled `hand-es-036` and `hand-pt-015` and as `hold-es-071` and `hold-pt-059` are labeled. The inconsistency was flagged when the file was imported, before any model was scored; the classifier results were regenerated after the change and the report gives the team-set numbers before and after it. The other labels stay as written.
