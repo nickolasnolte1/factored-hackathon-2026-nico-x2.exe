@@ -56,8 +56,9 @@ LIVE_APP_DIFFERENCES = (
     "the secure form, then the customer_signed_in event asking the agent to resume) is not exercised.",
     "Card clicks are not simulated: in the live UI a candidate card sends the movement with its id and the confirm "
     "button a fixed text; here the customer always types free text, so candidate turns are harder than live.",
-    "The intent classifier is attached (app/server.py builds the Agent without one); its output only reaches the "
-    "trace, but its time is part of the turn latency.",
+    "The intent classifier is attached, as in the app: while no dispute intent is set, its reading of a substantive "
+    "message reaches the model as a hint in the system prompt (and the trace), and its time is part of the turn "
+    "latency.",
 )
 
 

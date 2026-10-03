@@ -3,7 +3,9 @@
 Gold stores only a hash of each customer's document, so the demo needs the document numbers of a few snapshot
 customers to sign in for real (document + one-time code). This script reads them from Bronze for a fixed list of
 customers, checks that each one hashes to the same `document_hash` as in the local Gold snapshot, and writes
-`data/bank_tools/demo_personas.json` (git-ignored). The data is synthetic; the file never leaves the machine.
+`data/bank_tools/demo_personas.json` (git-ignored). The data is synthetic. The file is not committed, but the app
+serves its contents (names and document numbers) to every browser while APP_DEMO_CONTROLS is on, so the test
+customers can sign in.
 
     python -m app.build_personas --warehouse-id <id> [--profile factored]
 """
@@ -34,7 +36,8 @@ PERSONAS = [
 def sql(statement, warehouse_id, profile):
     body = {"warehouse_id": warehouse_id, "statement": statement, "wait_timeout": "50s"}
     out = subprocess.run(["databricks", "api", "post", "/api/2.0/sql/statements", "--json", json.dumps(body),
-                          "--profile", profile], capture_output=True, text=True, check=True).stdout
+                          "--profile", profile], capture_output=True, text=True, encoding="utf-8",
+                         check=True).stdout
     res = json.loads(out)
     if res["status"]["state"] != "SUCCEEDED":
         sys.exit("query failed: " + json.dumps(res["status"]))
@@ -53,7 +56,7 @@ def main():
     ids = [p["customer_id"] for p in PERSONAS]
     marks = ",".join("?" * len(ids))
     gold = {r["customer_id"]: dict(r) for r in db.execute(
-        "SELECT i.customer_id, i.document_type, i.document_hash, p.country_code, p.segment, p.customer_status "
+        "SELECT i.customer_id, i.document_type, i.document_hash, p.country_code, p.customer_status "
         "FROM customer_identity i JOIN customer_profile p USING (customer_id) WHERE i.customer_id IN (" + marks + ")",
         ids)}
     missing = set(ids) - set(gold)
@@ -66,21 +69,21 @@ def main():
         "WHERE customer_id IN (" + in_list + ")", args.warehouse_id, args.profile)}
 
     personas = []
-    for p in PERSONAS:
+    for n, p in enumerate(PERSONAS, start=1):
         g, b = gold[p["customer_id"]], bronze[p["customer_id"]]
         if document_hash(g["document_type"], b["document_number"]) != g["document_hash"]:
             sys.exit("document hash mismatch for " + p["customer_id"])
         personas.append({
-            "persona_id": p["customer_id"][-4:],
+            "persona_id": "P" + str(n),  # unrelated to the customer id, whose last 4 characters the console shows
             "first_name": b["first_name"],
             "country_code": g["country_code"],
-            "segment": g["segment"],
             "customer_status": g["customer_status"],
             "document_type": g["document_type"],
             "document_number": b["document_number"],
             "story": p["story"],
         })
-    OUT.write_text(json.dumps({"synthetic": True, "personas": personas}, ensure_ascii=False, indent=1))
+    OUT.write_text(json.dumps({"synthetic": True, "personas": personas}, ensure_ascii=False, indent=1),
+                   encoding="utf-8")
     print("wrote", OUT.relative_to(ROOT), "with", len(personas), "personas (all document hashes verified)")
 
 

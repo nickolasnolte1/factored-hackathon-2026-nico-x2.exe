@@ -1,3 +1,8 @@
 fastapi==0.115.*
 uvicorn==0.30.*
 requests>=2.31
+# Intent classifier (models/intent_classifier, trained with scikit-learn 1.5.1; loading checks the version)
+scikit-learn==1.5.1
+numpy==1.26.*
+scipy==1.13.*
+joblib==1.4.*

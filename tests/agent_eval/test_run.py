@@ -71,6 +71,30 @@ def test_endpoint_failures_are_not_scored_and_stop_the_scenario(env, monkeypatch
         assert len(tr["turns"]) == 1  # no more model calls after the endpoint failed
 
 
+class CrashingChat:
+    endpoint = "fake"
+
+    def chat(self, messages, tools):
+        raise KeyError("choices")
+
+
+def test_a_client_exception_is_a_harness_error_with_its_detail(env):
+    tr = harness.run_agent_scenario(two_turns(), env["snapshot"], env["cfg"], CrashingChat(), None, env["schemas"],
+                                    env["pol"])
+    assert tr["status"] == "harness_error" and len(tr["turns"]) == 1
+    assert tr["error"].startswith("agent fallback llm_error:KeyError: ") and "choices" in tr["error"]
+    assert "choices" in tr["turns"][0]["fallback_detail"]
+
+
+@pytest.mark.parametrize("reason,status", [
+    ("static_fallback", "ok"), ("max_model_calls:repeated_tool_call", "ok"),
+    ("llm_error:auth_failed:OSError", "infra_error"), ("llm_error:bad_response", "infra_error"),
+    ("llm_error:ChunkedEncodingError", "infra_error"), ("llm_error:TypeError", "harness_error"),
+])
+def test_fallback_reasons_map_to_a_status(reason, status):
+    assert harness.fallback_status(reason) == status
+
+
 def test_token_is_refreshed_once_after_a_403(env, monkeypatch):
     llm, seen = real_client(monkeypatch, [FakeResponse(403), FakeResponse(200, OK_BODY)])
     llm.tokens = harness.CliTokenProvider("https://example.invalid", "test")

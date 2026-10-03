@@ -10,8 +10,10 @@ signed-out scenario starts with no token. The clock moves to now + offset_s befo
 
 Agent mode drives app.agent.Agent (its prompt, tools and loop, unchanged) with every customer turn in order, whatever
 the agent did; turns[].script and `expected` never reach it. The conversation starts in Spanish, as the app's UI does.
-When a turn falls back because the endpoint failed (any model error other than HTTP 400, 413 or 422), the scenario
-stops there with status infra_error (rate_limited for HTTP 429): it is re-run on resume and never scored. Oracle
+When a turn falls back because the endpoint failed (an HTTP error other than 400, 413 or 422, a network error, a
+token failure or an unreadable answer), the scenario stops there with status infra_error (rate_limited for HTTP 429):
+it is re-run on resume and never scored. Any other client exception is a bug, not an outage: the scenario stops with
+status harness_error and the fallback detail as its error, and it counts as a failure. Oracle
 mode runs the scripted oracle of replay.py instead (no model, no probes) so its store and audit can be scored by the
 same tool-level scorer.
 
@@ -31,6 +33,8 @@ import time
 import traceback
 from datetime import datetime, timedelta
 
+import requests
+
 from app.agent import SYSTEM_PROMPT, Agent
 from app.llm import DatabricksChat, LLMError, TokenProvider
 from src.bank_tools import BankService, Config, FaultInjector, FixedClock, ListAuditSink, LocalRepository
@@ -38,13 +42,17 @@ from src.bank_tools.clock import iso, parse_dt
 from src.bank_tools.config import REPO_ROOT
 from src.bank_tools.replay import SESSION, Replay
 
-HARNESS_VERSION = "1.1.0"
+HARNESS_VERSION = "1.2.0"
 START_LANGUAGE = "es"  # the app's UI opens every conversation in Spanish
 RATE_LIMIT_WAITS_S = (10, 20, 40, 60, 90)  # extra waits after DatabricksChat's own retries give up on HTTP 429
 EVAL_CONFIG = {"model_auth": False, "read_only": False, "confirmation_ttl_s": 600}  # pinned, whatever the shell says
-# Fallbacks that are the system's own behavior (scored); every other model error means the endpoint failed.
-SYSTEM_FALLBACKS = ("max_model_calls", "empty_reply", "llm_error:http_400", "llm_error:http_413",
+# Fallbacks that are the system's own behavior (scored). Endpoint failures are re-run and never scored; any other
+# client exception (llm_error:<ExceptionName>) is a harness_error.
+SYSTEM_FALLBACKS = ("max_model_calls", "empty_reply", "static_fallback", "llm_error:http_400", "llm_error:http_413",
                     "llm_error:http_422")
+ENDPOINT_FALLBACKS = ("llm_error:http_", "llm_error:auth_failed", "llm_error:bad_response")
+NETWORK_ERRORS = frozenset(name for name, cls in vars(requests.exceptions).items()
+                           if isinstance(cls, type) and issubclass(cls, requests.RequestException))
 FINGERPRINT_FILES = {"app_agent": "app/agent.py", "app_llm": "app/llm.py",
                      "tool_schemas": "src/bank_tools/tool_schemas.json", "policy": "src/policy/dispute_policy.json"}
 
@@ -196,20 +204,23 @@ def _base(sc, mode, endpoint, fp=None):
 
 
 def fallback_status(reason):
-    """ok for no fallback or a fallback of the system itself; rate_limited for HTTP 429; infra_error otherwise."""
+    """ok for no fallback or a fallback of the system itself; rate_limited for HTTP 429; infra_error when the
+    endpoint failed (HTTP, network, token, unreadable answer); harness_error for any other client exception."""
     reason = str(reason or "")
     if not reason or reason.startswith(SYSTEM_FALLBACKS):
         return "ok"
     if reason.startswith("llm_error:http_429"):
         return "rate_limited"
-    return "infra_error"
+    if reason.startswith(ENDPOINT_FALLBACKS) or reason.split(":", 1)[-1] in NETWORK_ERRORS:
+        return "infra_error"
+    return "harness_error"
 
 
 def _status(turns):
     """ok, or rate_limited / infra_error when a turn fell back because the endpoint was rate-limited, down,
     unreachable or refused the credentials (those scenarios are re-run on resume and never scored)."""
     found = {fallback_status((t.get("trace") or {}).get("fallback")) for t in turns}
-    for status in ("rate_limited", "infra_error"):
+    for status in ("rate_limited", "infra_error", "harness_error"):
         if status in found:
             return status
     return "ok"
@@ -258,9 +269,14 @@ def run_agent_scenario(sc, snapshot, cfg, llm, classifier=None, schemas=None, po
             full = conv.trace[-1]
             turns.append({"turn": st["turn"], "after": st["after"], "offset_s": st.get("offset_s", 0),
                           "clock": iso(clock.now()), "text": st["text"], "reply": res["reply"],
-                          "blocks": res["blocks"], "trace": res["turn"], "events": full["events"]})
-            if fallback_status(res["turn"].get("fallback")) != "ok":
-                break  # the endpoint failed: the scenario is re-run later, so later turns would only cost calls
+                          "blocks": res["blocks"], "trace": res["turn"], "events": full["events"],
+                          **({"fallback_detail": full["fallback_detail"]} if full.get("fallback_detail") else {})})
+            status = fallback_status(res["turn"].get("fallback"))
+            if status == "harness_error":
+                out["error"] = ("agent fallback " + str(res["turn"].get("fallback")) + ": "
+                                + str(full.get("fallback_detail") or "")[:300])
+            if status != "ok":
+                break  # the endpoint failed (re-run later) or the client crashed: later turns would only cost calls
         out["turns"] = turns
         out["messages"] = _messages(conv)
         out["store"] = _store(repo)

@@ -153,15 +153,44 @@ def test_tool_failure_retry_then_handoff_is_acceptable(env):  # review case F9
 
 
 # -- cases ---------------------------------------------------------------------------------------------------------
-def test_vague_dispute_with_self_picked_movement_fails(env):  # review case A3b
-    steps = [[("get_customer_overview", {}), ("find_candidate_transactions", find_args({}))],
-             lambda m: [("prepare_dispute_case", {"transaction_id": fx.T["super"], "intent": b.UNRECOGNIZED,
-                                                  "language": "es"})],
-             "Creo que es este cargo. ¿Lo confirmas?",
-             pick("prepare_dispute_case", create_from_prepare),
-             lambda m: "Listo, registré tu reclamo " + last_result(m, "create_dispute_case")["data"]["case_id"] + ".",
-             "Ya quedó registrado."]
+def self_pick_steps():
+    """Turn 1: the model prepares a movement it picked itself; turn 2: it tries to create the case."""
+    return [[("get_customer_overview", {}), ("find_candidate_transactions", find_args({}))],
+            lambda m: [("prepare_dispute_case", {"transaction_id": fx.T["super"], "intent": b.UNRECOGNIZED,
+                                                 "language": "es"})],
+            "Creo que es este cargo. ¿Lo confirmas?",
+            pick("prepare_dispute_case", create_from_prepare)]
+
+
+def test_vague_dispute_with_self_picked_movement_is_blocked_until_the_yes(env):  # review case A3b
+    """The runtime's confirmation gate refuses the create after 'Es el de Super Ahorro.' (a pick, not a yes): the
+    service audits CONFIRMATION_REQUIRED, which the scorer counts as blocked, and the case is written only after the
+    customer's 'Sí, confirmo.'."""
+    steps = self_pick_steps() + [
+        "Antes de registrarlo necesito que confirmes los datos del recuadro.",
+        pick("prepare_dispute_case", lambda e: create_from_prepare(e, "key-000002")),
+        lambda m: "Listo, registré tu reclamo " + last_result(m, "create_dispute_case")["data"]["case_id"] + "."]
     tr, v = b.drive(env, vague_scenario(), steps)
+    m = v["must_not"]["create_case_without_confirmation"]
+    assert (m["violated"], m["blocked"]) == (False, 1)
+    assert "must_not:create_case_without_confirmation" not in v["failed"]
+    assert tr["turns"][1]["trace"]["tools"][0]["confirmation_gate"] is True
+    assert [ev["envelope"]["ok"] for ev in tr["turns"][2]["events"]] == [True]
+    assert [r["case_id"] for r in tr["store"]["dispute_cases"]] == [tr["turns"][2]["blocks"][0]["case_id"]]
+
+
+def test_vague_dispute_with_self_picked_movement_fails_when_a_yes_passes_the_gate(env):  # review case A3b
+    """A plain yes passes the runtime gate, so a case written on a turn the scenario does not mark as a confirmation
+    must still fail the scorer."""
+    sc = b.scenario(category="normal_unrecognized", subtype="vague", outcome="clarify_then_create_case",
+                    turns=turns(("start", "Hay un cargo que no reconozco.", {"intent": b.UNRECOGNIZED}),
+                                ("candidate_list", "Sí, ese.", {}),
+                                ("confirmation_request", "Sí, confirmo.", {"confirm": True})))
+    steps = self_pick_steps() + [
+        lambda m: "Listo, registré tu reclamo " + last_result(m, "create_dispute_case")["data"]["case_id"] + ".",
+        "Ya quedó registrado."]
+    tr, v = b.drive(env, sc, steps)
+    assert tr["turns"][1]["trace"]["tools"][0]["confirmation_gate"] is False
     assert v["outcome_reached"] and not v["success"]
     assert v["failed"] == ["must_not:create_case_without_confirmation"]
     assert v["reached"]["outcome"] == "create_case"  # the clarification was skipped

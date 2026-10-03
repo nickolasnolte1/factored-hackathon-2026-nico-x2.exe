@@ -68,10 +68,10 @@
       <div class="tools" aria-label="Herramientas de demo">
         <button type="button" class="rail-btn" id="btn-personas"><svg class="ic" aria-hidden="true"><use href="#i-people"/></svg>Clientes de prueba</button>
         <button type="button" class="rail-btn" id="btn-new"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Nuevo turno</button>
-        <button type="button" class="rail-btn" id="btn-clock" title="Adelanta el reloj del servicio 16 minutos para mostrar que la sesión vence"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg>Adelantar 16 min</button>
+        <button type="button" class="rail-btn" id="btn-clock" title="Adelanta 16 minutos el reloj de este turno, y solo de este, para mostrar que la sesión vence"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg>Adelantar 16 min</button>
       </div>
       <dl class="meta">
-        <div><dt>Reloj del servicio</dt><dd id="clock-now">—</dd></div>
+        <div><dt>Reloj de este turno</dt><dd id="clock-now">—</dd></div>
         <div><dt>Modelo</dt><dd id="model-name">—</dd></div>
       </dl>
     </div>
@@ -95,16 +95,17 @@
       </div>
       <form class="composer" id="composer">
         <label for="input" class="sr-only">Mensaje para el asistente</label>
-        <textarea id="input" rows="1" placeholder="Escribe tu mensaje" autocomplete="off"></textarea>
+        <textarea id="input" rows="1" placeholder="Escribe tu mensaje" autocomplete="off" maxlength="1000"></textarea>
         <button class="send" id="send" type="submit" aria-label="Enviar mensaje"><svg class="ic" aria-hidden="true"><use href="#i-send"/></svg></button>
       </form>
+      <p class="composer-hint" id="composer-hint" role="status" hidden></p>
     </section>
 
     <section class="trace" aria-label="Traza del asistente">
       <header class="trace-head">
         <h2>Traza</h2>
         <p>Cada herramienta que usó el asistente, con su resultado y lo que tardó. El modelo nunca ve el documento, el código ni el número de cliente.</p>
-        <p class="trace-pending">Clasificador de intención: pendiente de conexión.</p>
+        <p class="trace-pending" id="classifier-status">Clasificador de intención: —</p>
       </header>
       <div class="turns" id="trace"><p class="trace-empty">Cuando el cliente escriba, aquí aparece cada paso del asistente.</p></div>
     </section>
@@ -136,7 +137,7 @@
     <h2 id="personas-title">Clientes de prueba</h2>
     <button type="button" class="ghost" id="btn-close-personas" aria-label="Cerrar"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
   </header>
-  <p class="sheet-note">Clientes sintéticos del concurso. Usar uno completa el formulario seguro con su documento.</p>
+  <p class="sheet-note">Clientes sintéticos del concurso. Usar uno completa el formulario seguro con su documento; si en este turno ya entró otro cliente, se abre un turno nuevo. El teléfono que muestra el código es simulado.</p>
   <ul class="personas" id="personas"></ul>
 </div>
 
