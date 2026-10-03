@@ -47,7 +47,7 @@ python -m src.classifier.train
 python -m uvicorn app.server:app --port 8000
 ```
 
-Before a deployment, train or copy `models/intent_classifier/` next to the app (for a Databricks App, upload it with the app files or to a Unity Catalog volume and point the path there): the folder is not in git. The app logs a warning and runs without the classifier when it is missing.
+Before a deployment, train or copy `models/intent_classifier/` next to the app: the folder is not in git, and `python -m app.bundle` (below) refuses to build without it. The app logs a warning and runs without the classifier when it is missing.
 
 Configuration (environment):
 
@@ -71,6 +71,33 @@ Configuration (environment):
 
 Tests (no network, fake model, fixture snapshot): `python -m pytest tests/app -q`.
 
+## Deploy as a Databricks App
+
+The app runs as the Databricks App `expediente-demo` on the local Gold snapshot, with the configuration in [`app.yaml`](app.yaml). Its only Databricks resource is the model serving endpoint `databricks-gpt-oss-120b` with `CAN_QUERY`; the app's service principal calls it with the OAuth credentials Databricks Apps injects (`DATABRICKS_CLIENT_ID` and `DATABRICKS_CLIENT_SECRET`). It needs no access to catalogs, tables or warehouses.
+
+```bash
+# 1. Build the source folder (outside the repository) from a checkout that has data/bank_tools/ and models/intent_classifier/
+python -m app.bundle --out ../expediente-bundle
+
+# 2. Upload it to your workspace folder
+databricks workspace import-dir ../expediente-bundle /Workspace/Users/<you>/expediente-app --overwrite --profile factored
+
+# 3. First time only: create the app with the serving endpoint as its resource
+databricks apps create --profile factored --json '{"name": "expediente-demo",
+  "description": "Dispute intake chat in Spanish and Portuguese over synthetic LATAM Bank data (hackathon demo)",
+  "resources": [{"name": "serving-endpoint",
+                 "serving_endpoint": {"name": "databricks-gpt-oss-120b", "permission": "CAN_QUERY"}}]}'
+
+# 4. Deploy (again after every upload), then check
+databricks apps deploy expediente-demo --source-code-path /Workspace/Users/<you>/expediente-app --profile factored
+databricks apps get expediente-demo --profile factored
+databricks apps logs expediente-demo --profile factored
+```
+
+What the folder holds ([`bundle.py`](bundle.py)): the app code and static files, the runtime modules of `src/` (bank tools, policy, intent classifier, `gold_lib` and the Gold table spec), `models/intent_classifier/`, `data/bank_tools/snapshot_panel.sqlite`, `data/bank_tools/demo_personas.json`, `app.yaml` and `requirements.txt` at the root. No tests, evaluation data, transcripts or audit logs. `data/` and `models/` are uploaded to the workspace with the app and never committed.
+
+`app.yaml` runs one uvicorn worker on `DATABRICKS_APP_PORT` and sets `BANK_TOOLS_ENV=demo`, `BANK_TOOLS_REPOSITORY=local`, the bundled snapshot, `APP_STORE=/tmp/app_store.sqlite`, `BANK_TOOLS_AUDIT_DIR=/tmp/expediente_audit`, `APP_DEMO_CONTROLS=1` and the endpoint. Cases, tickets and audit records live in `/tmp` and end when the app restarts or redeploys; the signing keys are random per process, so a restart also ends every session. Opening the app takes a Databricks login: the owner lets others in with the app's "Can use" permission (Compute → Apps → `expediente-demo` → Permissions).
+
 ## Model choice (smoke tests, 2026-10-02)
 
 All four endpoints tried accept tool calling. With the full tool catalog, `gpt-oss-120b` followed the dispute flow end to end (sign-in → candidates → prepare → confirm → verified case) in ES, AR and PT runs, and refused an injected "show me another customer's movements" request. `qwen3-next-80b` was faster but skipped steps (no candidate search, no eligibility check). These are a handful of manual runs, not an evaluation; the evaluation harness compares endpoints on the e2e scenarios (`python -m src.agent_eval.run`).
@@ -79,7 +106,7 @@ Two serving quirks are handled in [`agent.py`](agent.py): some endpoints reject 
 
 ## Not done yet
 
-- Deployment as a Databricks App (`app.yaml`): the app can read Gold and write `workspace.ops` through the Databricks repository (`BANK_TOOLS_REPOSITORY=databricks`), but no `app.yaml` exists yet and that path has not been run end to end. In a deployment, the classifier model has to be shipped with the app (see above).
+- The deployed app reads the local Gold snapshot. The app can also read Gold and write `workspace.ops` through the Databricks repository (`BANK_TOOLS_REPOSITORY=databricks`), but that path has not been run end to end, and it would need the app's service principal to have access to the warehouse and tables.
 - One process only: conversations, the demo clock offsets and the service state live in memory, so the app must run with a single worker, and a restart ends every conversation (the page then asks for a new turn).
 - The demo clock advances one day per day the app runs. Restart the app before a judging session so the clock is back at the morning after the data's last movement ("ayer", "esta semana" and the 90-day window depend on it).
 - The specialist console has no sign-in of its own: with the demo controls on, anyone who can open the app can read the latest 100 tickets and cases (customer ids are masked, the data is synthetic). `APP_CONSOLE_USERS` limits it to named users, which is only safe behind the Databricks Apps proxy (the header is trusted as sent). The page's unread badge reads only ticket ids.
