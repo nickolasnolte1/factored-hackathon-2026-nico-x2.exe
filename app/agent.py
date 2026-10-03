@@ -395,6 +395,7 @@ class Conversation:
     had_session: bool = False
     subject: str = None  # runtime-only fingerprint of the signed-in customer, salted per conversation
     prepared: dict = field(default_factory=dict)  # confirmation_id -> transaction_id of a successful prepare
+    shown_ids: set = field(default_factory=set)  # transaction ids the service returned as candidates
 
 
 def llm_schema(schema):
@@ -763,6 +764,10 @@ class Agent:
             prepared_id = conv.prepared.get(args.get("confirmation_id"))
             if prepared_id and args.get("transaction_id") != prepared_id:  # a mistyped id voids a valid confirmation
                 args, fixed_id = {**args, "transaction_id": prepared_id}, True
+        elif name in ("prepare_dispute_case", "explain_decline") and isinstance(args, dict):
+            near = nearest_shown_id(args.get("transaction_id"), conv.shown_ids)
+            if near:  # a candidate id copied with a slip; the service still checks ownership and eligibility
+                args, fixed_id = {**args, "transaction_id": near}, True
         call_key = _canonical(args)
         seen[(name, call_key)] += 1
         gated = (name == "create_dispute_case" and isinstance(args, dict) and args.get("customer_confirmed") is True
@@ -785,6 +790,9 @@ class Agent:
         if envelope.get("ok"):
             if name not in VERIFIED_WRITES or data.get("verified"):
                 conv.verified_ids.update(m.group(0) for m in ID_IN_TEXT.finditer(json.dumps(data)))
+            if name == "find_candidate_transactions":
+                conv.shown_ids.update(c.get("transaction_id") for c in data.get("candidates") or []
+                                      if c.get("transaction_id"))
             if name == "prepare_dispute_case" and data.get("confirmation_id") and isinstance(args, dict):
                 conv.prepared[data["confirmation_id"]] = args.get("transaction_id")
             if name == "prepare_dispute_case" or (name == "find_candidate_transactions" and isinstance(args, dict)
@@ -794,7 +802,7 @@ class Agent:
         if gated:
             ev["confirmation_gate"] = True
         if fixed_id:
-            ev["transaction_id_from_confirmation"] = True
+            ev["transaction_id_corrected"] = True
         return ev
 
     def _written_text(self, conv, events):
@@ -875,6 +883,31 @@ def _display_text(text):
     """Display normalization only: some models emit narrow/no-break spaces and non-ASCII hyphens."""
     text = re.sub("[\u00a0\u2007\u2009\u202f]", " ", text or "").strip()
     return re.sub("[\u2010\u2011]", "-", text)
+
+
+def _edit_distance(a, b, limit=2):
+    """Levenshtein distance of two strings, or limit + 1 once it is known to exceed limit."""
+    if abs(len(a) - len(b)) > limit:
+        return limit + 1
+    row = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        prev, row[0] = row[0], i
+        best = row[0]
+        for j, cb in enumerate(b, 1):
+            prev, row[j] = row[j], min(row[j] + 1, row[j - 1] + 1, prev + (ca != cb))
+            best = min(best, row[j])
+        if best > limit:
+            return limit + 1
+    return row[-1]
+
+
+def nearest_shown_id(tid, shown, limit=2):
+    """The one candidate id within `limit` edits of a transaction id the model wrote but the service never showed
+    (a copy slip such as swapped or dropped characters), or None."""
+    if not isinstance(tid, str) or not shown or tid in shown:
+        return None
+    near = [s for s in shown if _edit_distance(tid, s, limit) <= limit]
+    return near[0] if len(near) == 1 else None
 
 
 def app_note(name, envelope, args, gated=False):

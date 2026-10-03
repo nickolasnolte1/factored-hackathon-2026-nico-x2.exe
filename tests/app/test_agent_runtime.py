@@ -11,7 +11,7 @@ from src.agent_eval import harness
 from src.bank_tools.errors import RepositoryUnavailable
 from tests.agent_eval import builders as b
 from tests.agent_eval.builders import last_result
-from tests.app.helpers import UNRECOGNIZED, create_prepared, prepared_turn, tool_messages
+from tests.app.helpers import UNRECOGNIZED, create_prepared, find, prepared_turn, tool_messages
 from tests.bank_tools import fixture_data as fx
 
 
@@ -425,3 +425,26 @@ def test_no_active_product_suggests_listing_closed_ones():  # dev failure e2e-pt
     note = agent_mod.app_note("list_products", empty, {"product_types": ["Checking Account"], "only_active": True})
     assert "without only_active" in note
     assert agent_mod.app_note("list_products", empty, {"product_types": ["Checking Account"]}) is None
+
+
+def test_a_candidate_id_copied_with_a_slip_is_matched_to_the_shown_one(bank):  # dev failure e2e-es-0057
+    def slipped(messages):
+        tid = last_result(messages, "find_candidate_transactions")["data"]["candidates"][0]["transaction_id"]
+        return [("prepare_dispute_case", {"transaction_id": tid[:-3] + tid[-2:], "intent": UNRECOGNIZED,
+                                          "language": "es"})]
+    agent, llm = bank.agent([[("get_customer_overview", {}), find()], slipped, "Confirme los datos, por favor."])
+    conv = agent.new_conversation("es")
+    conv.session_token = bank.session(conv)
+    out = agent.customer_turn(conv, "Hola, no reconozco una compra en Super Ahorro.")
+    prepare = [t for t in out["turn"]["tools"] if t["tool"] == "prepare_dispute_case"][0]
+    assert prepare["ok"] is True and prepare["args"]["transaction_id"] == fx.T["super"]
+
+
+def test_only_one_close_shown_id_is_used():
+    shown = {"TRX-AAAAAAAAAAAAAAAAAAAA", "TRX-AAAAAAAAAAAAAAAAAABB"}
+    assert agent_mod.nearest_shown_id("TRX-AAAAAAAAAAAAAAAAAAAB", shown) is None  # two are one edit away
+    assert agent_mod.nearest_shown_id("TRX-AAAAAAAAAAAAAAAAAAAA", shown) is None  # already a shown id
+    assert agent_mod.nearest_shown_id("TRX-ZZZZZZZZZZZZZZZZZZZZ", shown) is None  # nothing close
+    apart = {"TRX-AAAAAAAAAAAAAAAAAAAA", "TRX-BBBBBBBBBBBBBBBBBBBB"}
+    assert agent_mod.nearest_shown_id("TRX-AAAAAAAAAAAAAAAAAAA", apart) == "TRX-AAAAAAAAAAAAAAAAAAAA"  # one dropped
+    assert agent_mod.nearest_shown_id("TRX-BBBBBBBBBBBBBBBBBBAB", apart) == "TRX-BBBBBBBBBBBBBBBBBBBB"  # one swapped
