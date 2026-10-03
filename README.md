@@ -2,7 +2,7 @@
 
 An AI-first customer service system for a LATAM retail bank (MX / CO / AR), built end-to-end on Databricks: from raw data ingestion and quality contracts to a controlled, auditable conversational agent with human handoff.
 
-> Status: 🚧 in progress (challenge window: Sep 25 – Oct 5, 2026)
+> Status: 🚧 in progress (challenge window: Sep 25 – Oct 5, 2026). Held-out results: the agent completes 137 of 140 test scenarios (97.9%, 95% interval 95.0–100.0) and the intent classifier beats the keyword baseline on all three held-out sets; see [docs/06_evaluation.md](docs/06_evaluation.md).
 
 ## Repository layout
 
@@ -23,7 +23,7 @@ An AI-first customer service system for a LATAM retail bank (MX / CO / AR), buil
 | `src/agent_eval/` | End-to-end exam of the real agent (`app/agent.py` with the served model) on the e2e scenarios: a fresh bank per scenario, scoring of what was written to the bank, reply checks, and an oracle mode that must score 280/280 ([README](src/agent_eval/README.md)) |
 | `tests/agent_eval/` | Tests of the exam's scoring on hand-made fixtures and on a scripted model |
 | `eval/results/` | Classifier evaluation (`intent_classifier.*`) and agent exam results per split and endpoint (`agent_e2e_<split>_<endpoint>.*`), every number with its 95% interval |
-| `docs/` | Data findings, EDA and workflow selection, test scenarios, Silver, Gold and bank tools (architecture and evaluation reports to come) |
+| `docs/` | Data findings, EDA and workflow selection, test scenarios, Silver, Gold and bank tools, and the evaluation of the classifier and the agent ([06](docs/06_evaluation.md)) |
 | `docs/03_test_scenarios.md` | Test scenarios (ES/PT): label provenance, splits and leakage checks, e2e categories, audit results |
 | `docs/04_silver_layer.md` | Silver layer: issue-to-rule mapping, checks, watermark/MERGE semantics, freshness, results |
 | `docs/05_gold_and_bank_tools.md` | Gold layer (tables, privacy, identity hash, checks, results) and the bank tools (identity, tool catalog, access control, confirmation, handoff, errors, audit, test and replay results) |

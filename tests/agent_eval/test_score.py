@@ -367,3 +367,31 @@ def test_diagnostics_against_the_next_trigger():
     d = run(sc, b.store(), [], turns)["diagnostics"]
     assert d[0]["next_after"] == "confirmation_request" and d[0]["met"] is True
     assert d[1]["next_after"] is None
+
+
+@pytest.mark.parametrize("text", ["Fue rechazada porque en ese momento no había saldo o cupo suficiente (código 51).",
+                                  "Foi recusada porque não havia saldo suficiente no cartão."])
+def test_a_plain_wording_of_insufficient_funds_counts_as_the_reason(text):  # final run e2e-es-0038
+    assert score._unnegated(score.DECLINE_REASONS["insufficient_funds"], text)
+
+
+def test_a_decline_reason_in_parentheses_still_counts():  # dev run e2e-pt-0038
+    text = "A operação foi recusada sem um motivo específico (código 05 – recusa genérica)."
+    clean = text.replace("(", ", ").replace(")", ", ")
+    assert not score._unnegated(score.DECLINE_REASONS["do_not_honor"], text)
+    assert score._unnegated(score.DECLINE_REASONS["do_not_honor"], clean)
+
+
+def test_flagged_channel_ignores_merchant_names_and_other_lines_of_the_same_merchant():  # final run pt-0031, pt-0033
+    flagged, other = "TRX-FLAGGEDFLAGGEDFLAG", "TRX-OTHEROTHEROTHEROTH"
+    sc = {"expected": {"answer_facts": {"kind": "movements", "omit_channel_for": [flagged]}}}
+    rows = [{"transaction_id": other, "amount": 104.54, "channel": "POS",
+             "merchant": {"untrusted_text": "Internet Plus"}},
+            {"transaction_id": flagged, "amount": 356.79, "channel": None,
+             "merchant": {"untrusted_text": "Internet Plus"}}]
+    turns = [{"turn": 1, "events": [{"tool": "list_recent_transactions", "turn": 1,
+                                     "envelope": {"ok": True, "data": {"transactions": rows}}}]}]
+    clean = "- 14/05 – Internet Plus – USD 104,54 – aprovado (POS)\n- 27/03 – Internet Plus – USD 356,79 – aprovado"
+    assert score._flagged_channel(sc, turns, [(1, clean)])["violated"] is False
+    leaked = clean + " (App)"
+    assert score._flagged_channel(sc, turns, [(1, leaked)])["violated"] is True

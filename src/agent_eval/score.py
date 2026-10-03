@@ -217,7 +217,9 @@ DECLINE_REASONS = {
                                      r"(?:cupo|l[ií]mite)|"
                                      r"l[ií]mite (?:excedido|superado|alcanzado|ultrapassado|atingido)|"
                                      r"sin (?:fondos|saldo)|limite insuficiente|limite dispon[ií]vel insuficiente|"
-                                     r"sem saldo|fundos insuficientes", re.I),
+                                     r"sem saldo|fundos insuficientes|"
+                                     r"(?:no|n[aã]o) (?:hab[ií]a|hay|ten[ií]as?|havia|tinha|h[aá])[^.?!\n]{0,25}"
+                                     r"(?:saldo|cupo|fondos|fundos|l[ií]mite)[^.?!\n]{0,25}suficiente", re.I),
     "expired_card": re.compile(r"(?:tarjeta|cart[aã]o|pl[aá]stico)[^.?!\n]{0,30}(?:vencid|expirad)|"
                                r"(?:vencid|expirad)[oa][^.?!\n]{0,20}(?:tarjeta|cart[aã]o)|figuraba como vencida|"
                                r"constava como vencido", re.I),
@@ -718,7 +720,8 @@ def _answer_in_reply(sc, turns, found):
         pattern = DECLINE_REASONS.get(data.get("reason"))
         if pattern is None:
             return True, []
-        ok = bool(_unnegated(pattern, text))
+        # a reason stated in parentheses ("(código 05, recusa genérica)") still states it; negation still counts
+        ok = bool(_unnegated(pattern, text.replace("(", ", ").replace(")", ", ")))
         return ok, [] if ok else ["reason " + str(data.get("reason"))]
     return True, []
 
@@ -1120,6 +1123,13 @@ def _is_movement_line(line):
     return bool(re.match(r"\s*(?:[-*•·|]|\d+[.)]\s)", line))
 
 
+def _merchant_text(view):
+    merchant = view.get("merchant")
+    if isinstance(merchant, dict):
+        merchant = merchant.get("untrusted_text")
+    return (merchant or "").strip().lower()
+
+
 def _flagged_channel(sc, turns, replies):
     flagged = set(((sc["expected"].get("answer_facts") or {}).get("omit_channel_for")) or [])
     views = {}
@@ -1129,6 +1139,9 @@ def _flagged_channel(sc, turns, replies):
                 views[t["transaction_id"]] = t
     if not flagged:
         return {"violated": False, "detail": "no flagged movement", "not_applicable": True}
+    merchants = sorted({_merchant_text(t) for ev in _events(turns)
+                        for t in _env_data(ev).get("transactions") or _env_data(ev).get("candidates") or []} - {""},
+                       key=len, reverse=True)
     hits = []
     for turn, reply in replies:
         lines = [ln for ln in re.split(r"\n|;|(?<=[.!?])\s", reply or "") if ln.strip()]
@@ -1136,16 +1149,20 @@ def _flagged_channel(sc, turns, replies):
             view = views.get(tid)
             if not view:
                 continue
-            merchant = ((view.get("merchant") or {}).get("untrusted_text") or "").lower()
+            merchant = _merchant_text(view)
             for i, ln in enumerate(lines):
                 tokens = amount_tokens(ln)
+                # the movement's own amount names its line; its merchant only when the line shows no amount, since
+                # the same merchant can appear on another movement's line
                 named = (view.get("amount") is not None and _amount_in(view["amount"], tokens)) or \
-                    (merchant and merchant in ln.lower())
+                    (merchant and merchant in ln.lower() and not tokens)
                 if not named:
                     continue
                 block = [ln] + [nxt for nxt in lines[i + 1:i + 2] if not _is_movement_line(nxt)
                                 and not amount_tokens(nxt)]
                 for part in block:
+                    for name in merchants:  # a merchant such as "Internet Plus" is not a channel
+                        part = re.sub(re.escape(name), " ", part, flags=re.I)
                     for m in CHANNEL_WORDS.finditer(part):
                         if not SEE_IN_APP.search(part[max(0, m.start() - 30):m.start()]):
                             hits.append(f"turn {turn}: {tid}")
