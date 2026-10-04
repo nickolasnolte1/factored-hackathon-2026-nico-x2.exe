@@ -4,48 +4,219 @@ const state = {
   conv: null, key: null, label: "R-201", language: "es", session: null, now: null, personas: [], prefill: null,
   busy: false, smsTimer: null, ticketSel: null, seen: new Set(), stages: {}, called: false, turnSeq: 0,
   demo: true, console: true, limits: {}, pendingDoc: null, signedDoc: null, lastDoc: null, lastCandidates: null,
+  ui: "en", display: { label: "dispYourTurn", caption: "dispDesk" }, result: "stageResult", turns: [], openedAt: null,
+  cfg: null, uiNotes: [], board: null, boardError: false,
 };
 const $ = (sel) => document.querySelector(sel);
 const SESSION_MIN = 15;
 const TURN_TIMEOUT_MS = 90000;  // a model turn; the server bounds each model call to about 30 s
 const SLOW_MS = 20000;
 
-// ---- vocabulary ------------------------------------------------------------------------------------------------------
-// Pairs are [Spanish, Portuguese]. The trace, the rail and the specialist console are for the presenter and the
-// human agent, so they stay in Spanish; the chat and its cards follow the customer's language.
-const TOOL = {
-  get_customer_overview: "Resumen del cliente", list_products: "Productos", get_balance: "Saldo",
-  list_recent_transactions: "Movimientos recientes", find_candidate_transactions: "Buscar el movimiento",
-  explain_decline: "Explicar un rechazo", check_dispute_eligibility: "Revisar si se puede reclamar",
-  prepare_dispute_case: "Preparar el reclamo", create_dispute_case: "Crear el reclamo", get_case_status: "Estado del caso",
-  get_policy_info: "Consultar la política", handoff_to_human: "Pasar a un especialista",
+// ---- interface language ------------------------------------------------------------------------------------------------
+// The rail, the trace, the specialist console and the demo controls are for the presenter and the human agent: they
+// follow the interface language picked in the rail (English unless the viewer chose Spanish). The chat and its cards are
+// for the customer: they follow the language of the conversation, Spanish or Portuguese, whatever the interface says.
+const UI_KEY = "expediente.ui-lang";
+const UI = {
+  en: {
+    title: "Expediente · Customer service", locale: "en", moneyLocale: "en-US", railLabel: "Turn and navigation", brandBank: "LATAM Bank, synthetic data",
+    viewsLabel: "Views", navCustomer: "Customer service", navConsole: "Specialist console",
+    displayLabel: "Turn display", dispYourTurn: "Your turn", dispDesk: "Disputes desk", dispServed: "Turn served",
+    dispCaseOpen: (id) => `Dispute ${id} opened`, dispCaseExisting: (id) => `Dispute ${id} was already open`,
+    dispCalling: "Now calling", dispSeeSpecialist: "Please see a specialist",
+    stagesLabel: "Turn stages", stageIdentity: "Identification", stageMovement: "Movement", stageConfirm: "Confirmation",
+    stageResult: "Result", stageCase: "Dispute opened", stageSpecialist: "With a specialist",
+    notIdentified: "Not identified", notIdentifiedDetail: "The customer verifies their identity in the secure form.",
+    sessionExpired: "Session expired",
+    sessionExpiredDetail: `The ${SESSION_MIN}-minute session is over. The customer must verify their identity again.`,
+    identityVerified: "Identity verified", sessionDetail: (ref, at) => `Session ${ref}, expires at ${at} (this turn's clock).`,
+    smsFrom: "SMS from LATAM Bank, simulated phone", smsText: "Your code is",
+    toolsLabel: "Demo controls", testCustomers: "Test customers", newTurn: "New turn", clockBtn: "Advance 16 min",
+    clockTip: "Moves this turn's clock, and only this one, 16 minutes ahead to show the session expiring",
+    langLabel: "Interface language", clockLabel: "This turn's clock", modelLabel: "Model",
+    chatLabel: "Customer chat", turnWord: "Turn", ticketSub: "Disputes over unrecognized charges and incorrect fees",
+    langNote: "The assistant serves customers in Spanish and Portuguese.",
+    clockMoved: (n, at) => `This turn's clock moved ${n} minutes ahead: it is now ${at}. Other turns do not change.`,
+    clockMax: (n) => `This turn already reached the maximum of ${n} minutes ahead.`,
+    traceLabel: "Assistant trace", traceTitle: "Trace",
+    traceLede: "Every tool the assistant used, with its result and how long it took. The model never sees the document, the code or the customer number.",
+    traceEmpty: "When the customer writes, each step the assistant takes appears here.",
+    classifierNone: "Intent classifier: —",
+    classifierOn: (v) => `Intent classifier: ${v}. Its result is a hint for the assistant, not a decision.`,
+    classifierOff: "Intent classifier: not loaded (train it with python -m src.classifier.train).",
+    step: (n) => `Step ${n}`, kindAppEvent: "sign-in", kindMessage: "customer message", fresh: "New", model: "Model", tools: "Tools",
+    modelCalls: (n) => `${n} model call${n === 1 ? "" : "s"}`, classifier: "Intent classifier",
+    clsError: (e) => `no response (${e})`, clsConfidence: "confidence", clsBelow: "below the threshold",
+    intent: {
+      dispute_unrecognized_charge: "unrecognized charge dispute", dispute_incorrect_charge_or_fee: "incorrect charge or fee dispute",
+      account_payment_inquiry: "account or payment question", card_lost_or_block: "lost card or card block",
+      other_complaint: "other complaint", out_of_scope: "out of scope",
+    },
+    eligible: "eligible for a dispute", notEligible: "not eligible for a dispute", needsSpecialist: "needs a specialist",
+    reasonIs: "reason", nextIs: "next", runtimeFallback: "called by the app, not the model",
+    chatOnly: "Conversation only", chatOnlyDetail: "The assistant answered without looking up any data.",
+    unverifiedIds: (ids) => `The reply mentions ${ids} without backing from a tool.`,
+    fbStatic: "Fixed reply: the ticket could not be recorded and the customer got a message to contact the bank.",
+    fbHanded: "Backup reply: the model failed and the app handed the case to a specialist.",
+    fbRepeated: "Fixed reply: the model repeated the same call and the app ended the turn, without creating a ticket.",
+    fbGeneric: "Backup reply: the model failed and the app answered with a fixed text, without creating a new ticket.",
+    boardTitle: "Specialist calls", refresh: "Refresh", casesTitle: "Disputes opened in the chat", colCase: "Case", colTurn: "Turn",
+    colType: "Type", colAmount: "Amount", colPriority: "Priority", colFirstResponse: "First response", fileLabel: "Case file",
+    fileEmpty: "Pick a call to open its case file.", consoleError: "Could not read the console. Try again with Refresh.",
+    noCalls: "No one has been called to a specialist yet.", noCases: "No dispute has been opened yet.", earlier: "Earlier",
+    langName: { es: "Spanish", pt: "Portuguese" }, nothing: "Nothing recorded.", ok: "OK", draft: "Dispute draft attached",
+    dropped: (n) => `${n} evidence item${n === 1 ? "" : "s"} dropped because the service could not check ${n === 1 ? "it" : "them"}`,
+    noEvidence: "The service received no verifiable evidence for this handoff: review the conversation before acting.",
+    reasonWarn: (r) => `Handoff reason: ${r}.`, ticket: "Ticket", queueOf: (q) => `${q} queue`, customer: "Customer",
+    verifiedRef: "Identity verified, reference", language: "Language", priority: "Priority",
+    firstResponseIn: (h) => `, first response within ${h} h`, reason: "Handoff reason", received: "Received",
+    checked: "Verified by the service", rawRecord: "Full service record", claimed: "According to the assistant (unverified)",
+    claimedNote: "The model wrote this for you. The service did not check it: compare it with the section above before acting.",
+    needs: "What the customer needs", facts: "Facts it reports", did: "What it did", review: "To review",
+    close: "Close", use: "Use", suspended: "Suspended",
+    personasNote: "Synthetic customers from the hackathon data. Using one fills the secure form with their document; if another customer already signed in on this turn, a new turn opens. The phone that shows the code is simulated.",
+    personasMissing: (cmd) => `Run ${cmd} to create the test customers.`,
+    countries: { MX: "Mexico", CO: "Colombia", AR: "Argentina" },
+    // Test customer stories come in Spanish and Portuguese from build_personas; English is keyed by the Spanish text.
+    stories: {
+      "Cliente regular, montos bajos": "Regular customer, small amounts", "Cliente regular": "Regular customer",
+      "Muchos movimientos y un pago rechazado": "Many movements and one declined payment",
+      "Tiene un movimiento sobre el umbral de 7.000 USD": "Has a movement above the 7,000 USD threshold",
+      "Cuenta suspendida: debe pasar a un humano": "Suspended account: must go to a person",
+    },
+    tool: {
+      get_customer_overview: "Customer overview", list_products: "Products", get_balance: "Balance",
+      list_recent_transactions: "Recent transactions", find_candidate_transactions: "Find the transaction",
+      explain_decline: "Explain a decline", check_dispute_eligibility: "Check dispute eligibility",
+      prepare_dispute_case: "Prepare the dispute", create_dispute_case: "Open the dispute", get_case_status: "Case status",
+      get_policy_info: "Look up the policy", handoff_to_human: "Hand off to a specialist",
+    },
+    err: {
+      AUTH_REQUIRED: "Identity not verified yet", SESSION_EXPIRED: "Session expired", POLICY_BLOCKED: "Blocked by policy",
+      NOT_FOUND: "Not found", VALIDATION_ERROR: "Invalid arguments", INVALID_ARGUMENT: "Invalid arguments",
+      RATE_LIMITED: "Too many attempts", FORBIDDEN: "Tool not allowed for the model", UNAVAILABLE: "Service unavailable",
+      INTERNAL: "Internal service error", AUTH_FAILED: "Wrong code", CONFIRMATION_REQUIRED: "Customer confirmation missing",
+    },
+    next: {
+      confirm_candidate: "confirm the movement with the customer", ask_customer_to_pick: "ask the customer to pick one",
+      ask_one_clarifying_question: "ask one clarifying question", handoff: "hand off to a specialist",
+      reauthenticate: "ask the customer to verify their identity", ask_customer_to_confirm_then_create: "ask for confirmation, then open the dispute",
+      ask_customer_to_confirm_then_handoff: "ask for confirmation, then hand off to a specialist",
+      ask_code_again: "ask for the code again", create_case: "open the dispute", explain_decline: "explain the decline",
+    },
+    reasons: {
+      customer_status_restricted: "Restricted account", suspected_card_compromise: "Card may be compromised",
+      card_block_request: "Asks to block the card", explicit_human_request: "Asked to talk to a person", tool_failure: "Technical failure",
+      low_intent_confidence: "Request not understood", no_match_after_clarification: "Movement not found",
+      outside_dispute_window: "Outside the 90-day window", amount_above_threshold: "Amount above the threshold", complaint_routing: "Complaint",
+    },
+    reasonCheck: {
+      consistent: "Matches what the service recorded", inconsistent: "Does not match what the service recorded",
+      not_verifiable: "The service could not check it",
+    },
+  },
+  es: {
+    title: "Expediente · Atención al cliente", locale: "es", moneyLocale: "", railLabel: "Turno y navegación", brandBank: "LATAM Bank, datos sintéticos",
+    viewsLabel: "Vistas", navCustomer: "Atención al cliente", navConsole: "Consola del especialista",
+    displayLabel: "Pantalla de turno", dispYourTurn: "Tu turno", dispDesk: "Atención de reclamos", dispServed: "Turno atendido",
+    dispCaseOpen: (id) => `Reclamo ${id} abierto`, dispCaseExisting: (id) => `Reclamo ${id} ya estaba abierto`,
+    dispCalling: "Llamando", dispSeeSpecialist: "Pase con un especialista",
+    stagesLabel: "Etapas del turno", stageIdentity: "Identificación", stageMovement: "Movimiento", stageConfirm: "Confirmación",
+    stageResult: "Resultado", stageCase: "Reclamo abierto", stageSpecialist: "Con especialista",
+    notIdentified: "Sin identificar", notIdentifiedDetail: "El cliente verifica su identidad en el formulario seguro.",
+    sessionExpired: "Sesión vencida",
+    sessionExpiredDetail: `Pasaron los ${SESSION_MIN} minutos de la sesión. Debe verificar su identidad otra vez.`,
+    identityVerified: "Identidad verificada", sessionDetail: (ref, at) => `Sesión ${ref}, vence a las ${at} (reloj de este turno).`,
+    smsFrom: "SMS de LATAM Bank, teléfono simulado", smsText: "Tu código es",
+    toolsLabel: "Herramientas de demo", testCustomers: "Clientes de prueba", newTurn: "Nuevo turno", clockBtn: "Adelantar 16 min",
+    clockTip: "Adelanta 16 minutos el reloj de este turno, y solo de este, para mostrar que la sesión vence",
+    langLabel: "Idioma de la interfaz", clockLabel: "Reloj de este turno", modelLabel: "Modelo",
+    chatLabel: "Chat del cliente", turnWord: "Turno", ticketSub: "Reclamos por cargos no reconocidos y cobros incorrectos",
+    langNote: "El asistente atiende a los clientes en español y portugués.",
+    clockMoved: (n, at) => `Reloj de este turno adelantado ${n} minutos: ahora son las ${at}. Los otros turnos no cambian.`,
+    clockMax: (n) => `Este turno ya llegó al máximo de ${n} minutos de adelanto.`,
+    traceLabel: "Traza del asistente", traceTitle: "Traza",
+    traceLede: "Cada herramienta que usó el asistente, con su resultado y lo que tardó. El modelo nunca ve el documento, el código ni el número de cliente.",
+    traceEmpty: "Cuando el cliente escriba, aquí aparece cada paso del asistente.",
+    classifierNone: "Clasificador de intención: —",
+    classifierOn: (v) => `Clasificador de intención: ${v}. Su resultado es una pista para el asistente, no una decisión.`,
+    classifierOff: "Clasificador de intención: no cargado (se entrena con python -m src.classifier.train).",
+    step: (n) => `Paso ${n}`, kindAppEvent: "inicio de sesión", kindMessage: "mensaje del cliente", fresh: "Nuevo", model: "Modelo",
+    tools: "Herramientas", modelCalls: (n) => `${n} llamada${n === 1 ? "" : "s"} al modelo`, classifier: "Clasificador de intención",
+    clsError: (e) => `no respondió (${e})`, clsConfidence: "confianza", clsBelow: "bajo el umbral",
+    intent: {
+      dispute_unrecognized_charge: "reclamo por cargo no reconocido", dispute_incorrect_charge_or_fee: "reclamo por cobro o comisión incorrectos",
+      account_payment_inquiry: "consulta de cuenta o pago", card_lost_or_block: "tarjeta perdida o bloqueo",
+      other_complaint: "otra queja", out_of_scope: "fuera de alcance",
+    },
+    eligible: "se puede reclamar", notEligible: "no se puede reclamar", needsSpecialist: "requiere especialista",
+    reasonIs: "motivo", nextIs: "siguiente", runtimeFallback: "lo llamó la app, no el modelo",
+    chatOnly: "Solo conversación", chatOnlyDetail: "El asistente respondió sin consultar datos.",
+    unverifiedIds: (ids) => `La respuesta menciona ${ids} sin respaldo de una herramienta.`,
+    fbStatic: "Respuesta fija: no se pudo registrar el ticket y el cliente recibió un mensaje para contactar al banco.",
+    fbHanded: "Respuesta de respaldo: el modelo falló y la app pasó el caso a un especialista.",
+    fbRepeated: "Respuesta fija: el modelo repitió la misma llamada y la app cortó el turno, sin crear un ticket.",
+    fbGeneric: "Respuesta de respaldo: el modelo falló y la app respondió con un texto fijo, sin crear un ticket nuevo.",
+    boardTitle: "Llamados a especialista", refresh: "Actualizar", casesTitle: "Reclamos abiertos en el chat", colCase: "Caso",
+    colTurn: "Turno", colType: "Tipo", colAmount: "Monto", colPriority: "Prioridad", colFirstResponse: "Primera respuesta",
+    fileLabel: "Expediente", fileEmpty: "Elige un llamado para abrir su expediente.",
+    consoleError: "No se pudo leer la consola. Vuelve a intentarlo con Actualizar.",
+    noCalls: "Todavía nadie fue llamado a un especialista.", noCases: "Todavía no se abrió ningún reclamo.", earlier: "Previo",
+    langName: { es: "Español", pt: "Portugués" }, nothing: "Nada registrado.", ok: "Correcto", draft: "Borrador de reclamo adjunto",
+    dropped: (n) => `${n} evidencia(s) descartada(s) porque el servicio no pudo comprobarlas`,
+    noEvidence: "El servicio no recibió evidencia comprobable para esta transferencia: revisa la conversación antes de actuar.",
+    reasonWarn: (r) => `Motivo: ${r}.`, ticket: "Ticket", queueOf: (q) => `cola ${q}`, customer: "Cliente",
+    verifiedRef: "Identidad verificada, referencia", language: "Idioma", priority: "Prioridad",
+    firstResponseIn: (h) => `, primera respuesta en ${h} h`, reason: "Motivo", received: "Recibido",
+    checked: "Comprobado por el servicio", rawRecord: "Registro completo del servicio", claimed: "Según el asistente (sin verificar)",
+    claimedNote: "Lo escribió el modelo para ti. El servicio no lo comprobó: contrástalo con lo de arriba antes de actuar.",
+    needs: "Lo que necesita el cliente", facts: "Hechos que reporta", did: "Lo que hizo", review: "Para revisar",
+    close: "Cerrar", use: "Usar", suspended: "Suspendida",
+    personasNote: "Clientes sintéticos del concurso. Usar uno completa el formulario seguro con su documento; si en este turno ya entró otro cliente, se abre un turno nuevo. El teléfono que muestra el código es simulado.",
+    personasMissing: (cmd) => `Corre ${cmd} para crear los clientes de prueba.`,
+    countries: { MX: "México", CO: "Colombia", AR: "Argentina" },
+    stories: {},
+    tool: {
+      get_customer_overview: "Resumen del cliente", list_products: "Productos", get_balance: "Saldo",
+      list_recent_transactions: "Movimientos recientes", find_candidate_transactions: "Buscar el movimiento",
+      explain_decline: "Explicar un rechazo", check_dispute_eligibility: "Revisar si se puede reclamar",
+      prepare_dispute_case: "Preparar el reclamo", create_dispute_case: "Crear el reclamo", get_case_status: "Estado del caso",
+      get_policy_info: "Consultar la política", handoff_to_human: "Pasar a un especialista",
+    },
+    err: {
+      AUTH_REQUIRED: "Falta verificar la identidad", SESSION_EXPIRED: "La sesión venció", POLICY_BLOCKED: "Bloqueado por la política",
+      NOT_FOUND: "No encontrado", VALIDATION_ERROR: "Argumentos inválidos", INVALID_ARGUMENT: "Argumentos inválidos",
+      RATE_LIMITED: "Demasiados intentos", FORBIDDEN: "Herramienta no permitida al modelo", UNAVAILABLE: "Servicio no disponible",
+      INTERNAL: "Error interno del servicio", AUTH_FAILED: "Código incorrecto", CONFIRMATION_REQUIRED: "Falta la confirmación del cliente",
+    },
+    next: {
+      confirm_candidate: "confirmar el movimiento con el cliente", ask_customer_to_pick: "pedir al cliente que elija",
+      ask_one_clarifying_question: "hacer una pregunta para aclarar", handoff: "pasar a un especialista",
+      reauthenticate: "pedir que verifique su identidad", ask_customer_to_confirm_then_create: "pedir confirmación y luego crear",
+      ask_customer_to_confirm_then_handoff: "pedir confirmación y pasar a un especialista",
+      ask_code_again: "pedir el código de nuevo", create_case: "crear el reclamo", explain_decline: "explicar el rechazo",
+    },
+    reasons: {
+      customer_status_restricted: "Cuenta restringida", suspected_card_compromise: "Posible tarjeta comprometida",
+      card_block_request: "Pide bloquear la tarjeta", explicit_human_request: "Pidió hablar con una persona", tool_failure: "Falla técnica",
+      low_intent_confidence: "No se entendió la solicitud", no_match_after_clarification: "No apareció el movimiento",
+      outside_dispute_window: "Fuera del plazo de 90 días", amount_above_threshold: "Monto sobre el umbral", complaint_routing: "Queja",
+    },
+    reasonCheck: {
+      consistent: "Coincide con lo que registró el servicio", inconsistent: "No coincide con lo que registró el servicio",
+      not_verifiable: "El servicio no pudo comprobarlo",
+    },
+  },
 };
-const ERR = {
-  AUTH_REQUIRED: "Falta verificar la identidad", SESSION_EXPIRED: "La sesión venció", POLICY_BLOCKED: "Bloqueado por la política",
-  NOT_FOUND: "No encontrado", VALIDATION_ERROR: "Argumentos inválidos", INVALID_ARGUMENT: "Argumentos inválidos",
-  RATE_LIMITED: "Demasiados intentos", FORBIDDEN: "Herramienta no permitida al modelo", UNAVAILABLE: "Servicio no disponible",
-  INTERNAL: "Error interno del servicio", AUTH_FAILED: "Código incorrecto", CONFIRMATION_REQUIRED: "Falta la confirmación del cliente",
-};
-const NEXT = {
-  confirm_candidate: "confirmar el movimiento con el cliente", ask_customer_to_pick: "pedir al cliente que elija",
-  ask_one_clarifying_question: "hacer una pregunta para aclarar", handoff: "pasar a un especialista",
-  reauthenticate: "pedir que verifique su identidad", ask_customer_to_confirm_then_create: "pedir confirmación y luego crear",
-  ask_customer_to_confirm_then_handoff: "pedir confirmación y pasar a un especialista",
-  ask_code_again: "pedir el código de nuevo", create_case: "crear el reclamo", explain_decline: "explicar el rechazo",
-};
-const REASON = {
-  customer_status_restricted: "Cuenta restringida", suspected_card_compromise: "Posible tarjeta comprometida",
-  card_block_request: "Pide bloquear la tarjeta", explicit_human_request: "Pidió hablar con una persona", tool_failure: "Falla técnica",
-  low_intent_confidence: "No se entendió la solicitud", no_match_after_clarification: "No apareció el movimiento",
-  outside_dispute_window: "Fuera del plazo de 90 días", amount_above_threshold: "Monto sobre el umbral", complaint_routing: "Queja",
-};
-const REASON_CHECK = {
-  consistent: "Coincide con lo que registró el servicio", inconsistent: "No coincide con lo que registró el servicio",
-  not_verifiable: "El servicio no pudo comprobarlo",
-};
-const QUEUE = { account_restrictions: ["Restricciones de cuenta", "Restrições de conta"], disputes: ["Disputas", "Contestações"],
-  cards: ["Tarjetas", "Cartões"], complaints: ["Quejas", "Reclamações"], fraud: ["Fraude", "Fraude"], general: ["General", "Geral"] };
-const PRIO = { high: ["Alta", "Alta"], medium: ["Media", "Média"], low: ["Baja", "Baixa"] };
+const ui = (k) => UI[state.ui][k];
+const uiMap = (name, key) => UI[state.ui][name][key] || key || "";
+
+// ---- customer vocabulary ---------------------------------------------------------------------------------------------
+// Entries are [Spanish, Portuguese], the conversation's languages; the ones the specialist console shows add English.
+const QUEUE = { account_restrictions: ["Restricciones de cuenta", "Restrições de conta", "Account restrictions"],
+  disputes: ["Disputas", "Contestações", "Disputes"], cards: ["Tarjetas", "Cartões", "Cards"],
+  complaints: ["Quejas", "Reclamações", "Complaints"], fraud: ["Fraude", "Fraude", "Fraud"], general: ["General", "Geral", "General"] };
+const PRIO = { high: ["Alta", "Alta", "High"], medium: ["Media", "Média", "Medium"], low: ["Baja", "Baixa", "Low"] };
 const STATUS = { Open: ["Abierto", "Aberta"], open: ["Abierto", "Aberta"], "In Process": ["En proceso", "Em andamento"],
   Closed: ["Cerrado", "Encerrada"], Resolved: ["Resuelto", "Resolvida"], queued: ["En cola", "Na fila"] };
 const PRODUCT = { "Checking Account": ["Cuenta corriente", "Conta corrente"], "Savings Account": ["Cuenta de ahorros", "Poupança"],
@@ -54,11 +225,20 @@ const PRODUCT = { "Checking Account": ["Cuenta corriente", "Conta corrente"], "S
 const TXN = { Purchase: ["Compra", "Compra"], Withdrawal: ["Retiro", "Saque"], Transfer: ["Transferencia", "Transferência"],
   Payment: ["Pago", "Pagamento"], Deposit: ["Depósito", "Depósito"], Adjustment: ["Cargo del banco", "Tarifa do banco"] };
 const CHANNEL = { ATM: ["Cajero", "Caixa eletrônico"], POS: ["Comercio", "Maquininha"], Web: ["Web", "Web"], App: ["App", "App"], Branch: ["Sucursal", "Agência"], Transfer: ["Transferencia", "Transferência"] };
-const DISPUTE = { unrecognized: ["Cargo no reconocido", "Compra não reconhecida"], incorrect: ["Cobro incorrecto", "Cobrança incorreta"] };
+const DISPUTE = { unrecognized: ["Cargo no reconocido", "Compra não reconhecida", "Unrecognized charge"],
+  incorrect: ["Cobro incorrecto", "Cobrança incorreta", "Incorrect charge"] };
 const HANDOFF_WHY = { amount_above_threshold: ["Por el monto", "Pelo valor"], outside_dispute_window: ["Por la fecha del movimiento", "Pela data do movimento"],
   suspected_card_compromise: ["Porque tu tarjeta podría estar comprometida", "Como seu cartão pode estar comprometido"] };
+// The receipts in the customer's bubble name each tool in the conversation language: the Spanish names of UI.es, plus these.
+const TOOL_PT = { get_customer_overview: "Resumo do cliente", list_products: "Produtos", get_balance: "Saldo",
+  list_recent_transactions: "Movimentos recentes", find_candidate_transactions: "Buscar o movimento", explain_decline: "Explicar uma recusa",
+  check_dispute_eligibility: "Verificar se é possível contestar", prepare_dispute_case: "Preparar a contestação",
+  create_dispute_case: "Abrir a contestação", get_case_status: "Status do caso", get_policy_info: "Consultar a política",
+  handoff_to_human: "Passar para um especialista" };
+const TOOL = Object.fromEntries(Object.entries(UI.es.tool).map(([k, es]) => [k, [es, TOOL_PT[k] || es]]));
 const MONTHS = { es: ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"],
-  pt: ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"] };
+  pt: ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"],
+  en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] };
 const T = {
   es: {
     greeting: "Hola, soy el asistente de LATAM Bank. Te ayudo con cargos que no reconoces y con cobros o comisiones incorrectos. También puedo revisar tu saldo y tus movimientos. ¿Qué necesitas?",
@@ -104,7 +284,7 @@ const T = {
     errServer: "El servidor tuvo un error al procesar el mensaje. Vuelve a intentarlo; si se repite, empieza un turno nuevo.",
     errServerBusy: "El servidor está atendiendo muchas conversaciones a la vez. Espera unos segundos y vuelve a intentarlo.",
     errNewLimit: (s) => `Se abrieron muchos turnos seguidos desde este navegador. Espera ${Math.ceil(s / 60)} min y vuelve a intentarlo.`,
-    placeholder: "Escribe tu mensaje",
+    placeholder: "Escribe tu mensaje", inputLabel: "Mensaje para el asistente", sendLabel: "Enviar mensaje",
   },
   pt: {
     greeting: "Olá, sou o assistente do LATAM Bank. Ajudo com compras que você não reconhece e com cobranças ou tarifas incorretas. Também posso consultar seu saldo e seus movimentos. Do que você precisa?",
@@ -150,19 +330,21 @@ const T = {
     errServer: "O servidor teve um erro ao processar a mensagem. Tente de novo; se continuar, comece um novo atendimento.",
     errServerBusy: "O servidor está atendendo muitas conversas ao mesmo tempo. Espere alguns segundos e tente de novo.",
     errNewLimit: (s) => `Muitos atendimentos foram abertos seguidos neste navegador. Espere ${Math.ceil(s / 60)} min e tente de novo.`,
-    placeholder: "Escreva sua mensagem",
+    placeholder: "Escreva sua mensagem", inputLabel: "Mensagem para o assistente", sendLabel: "Enviar mensagem",
   },
 };
 const t = (k) => (T[state.language] || T.es)[k];
-const tr = (map, key, lang = state.language) => (map[key] ? map[key][lang === "pt" ? 1 : 0] : key || "");
+const LANG_AT = { es: 0, pt: 1, en: 2 };
+const tr = (map, key, lang = state.language) => (map[key] ? map[key][LANG_AT[lang] || 0] || map[key][0] : key || "");
 
 // ---- helpers -----------------------------------------------------------------------------------------------------------
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function md(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"); }
 function icon(name) { return `<svg class="ic" aria-hidden="true"><use href="#i-${name}"/></svg>`; }
-function money(amount, currency) {
+// The customer sees amounts written the way their country writes them; the console passes the interface's locale.
+function money(amount, currency, locale = "") {
   if (amount === null || amount === undefined) return "—";
-  const loc = { COP: "es-CO", ARS: "es-AR", MXN: "es-MX", BRL: "pt-BR", USD: "es-MX" }[currency] || "es";
+  const loc = locale || { COP: "es-CO", ARS: "es-AR", MXN: "es-MX", BRL: "pt-BR", USD: "es-MX" }[currency] || "es";
   try { return new Intl.NumberFormat(loc, { style: "currency", currency, currencyDisplay: "code" }).format(amount); }
   catch { return `${currency} ${amount}`; }
 }
@@ -171,7 +353,7 @@ function money(amount, currency) {
 function when(ts, withTime = true, lang = state.language) {
   const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/.exec(String(ts || ""));
   if (!m) return "—";
-  const day = `${Number(m[3])} ${MONTHS[lang === "pt" ? "pt" : "es"][Number(m[2]) - 1]} ${m[1]}`;
+  const day = `${Number(m[3])} ${(MONTHS[lang] || MONTHS.es)[Number(m[2]) - 1]} ${m[1]}`;
   return withTime && m[4] ? `${day}, ${m[4]}:${m[5]}` : day;
 }
 function hhmm(ts) { const m = /[T ](\d{2}):(\d{2})/.exec(String(ts || "")); return m ? `${m[1]}:${m[2]}` : "—"; }
@@ -179,7 +361,7 @@ function minutesBetween(from, to) {
   const n = (s) => Date.parse(String(s || "").slice(0, 19).replace(" ", "T") + "Z");
   return (n(to) - n(from)) / 60000;
 }
-function secs(ms) { return (ms / 1000).toLocaleString("es", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " s"; }
+function secs(ms) { return (ms / 1000).toLocaleString(ui("locale"), { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " s"; }
 function el(html) { const d = document.createElement("div"); d.innerHTML = html.trim(); return d.firstElementChild; }
 function docKey(type, number) { return `${String(type || "").trim().toUpperCase()}|${String(number || "").toUpperCase().replace(/[^A-Z0-9]/g, "")}`; }
 
@@ -208,6 +390,17 @@ async function api(path, body, timeoutMs = 20000) {
 function scrollDown() { const m = $("#messages"); m.scrollTop = m.scrollHeight; }
 function add(node) { $("#messages").appendChild(node); scrollDown(); return node; }
 function note(text, kind = "", iconName = "check") { return add(el(`<div class="note ${kind}">${icon(iconName)}<span>${esc(text)}</span></div>`)); }
+// A note about a demo control: it is for the presenter, so it is written again when the interface language changes.
+function uiNote(key, args, kind, iconName) {
+  const node = note("", kind, iconName);
+  const paint = () => {
+    const v = ui(key);
+    node.lang = state.ui;
+    node.querySelector("span").textContent = typeof v === "function" ? v(...args) : v;
+  };
+  paint();
+  state.uiNotes.push({ node, paint });
+}
 function newTurnButton() {
   const btn = el(`<button type="button" class="btn small">${icon("plus")}${esc(t("newTurn"))}</button>`);
   btn.addEventListener("click", newConversation);
@@ -221,36 +414,43 @@ function renderStages() {
     li.className = state.stages[li.dataset.stage] || "";
     li.setAttribute("aria-current", state.stages[li.dataset.stage] === "current" ? "step" : "false");
   });
+  $("#stage-result-name").textContent = ui(state.result);
 }
-function setDisplay(label, caption, called = false) {
+// The display keeps interface keys, not text, so a language switch can write it again without calling the turn twice.
+function setDisplay(label, caption, arg = null, called = false) {
   const d = $("#display");
-  $("#display-label").textContent = label;
-  $("#display-caption").textContent = caption;
-  $("#turn-number").textContent = state.label;
+  state.display = { label, caption, arg };
+  renderDisplay();
   d.classList.remove("called");
   if (called) { void d.offsetWidth; d.classList.add("called"); }
+}
+function renderDisplay() {
+  const { label, caption, arg } = state.display, text = ui(caption);
+  $("#display-label").textContent = ui(label);
+  $("#display-caption").textContent = typeof text === "function" ? text(arg) : text;
+  $("#turn-number").textContent = state.label;
 }
 function renderSession() {
   const box = $("#session"), meter = $("#session-meter");
   box.classList.remove("on", "expired");
-  $("#clock-now").textContent = when(state.now, true, "es");
+  $("#clock-now").textContent = when(state.now, true, state.ui);
   if (!state.session) {
-    $("#session-state").textContent = "Sin identificar";
-    $("#session-detail").textContent = "El cliente verifica su identidad en el formulario seguro.";
+    $("#session-state").textContent = ui("notIdentified");
+    $("#session-detail").textContent = ui("notIdentifiedDetail");
     meter.hidden = true;
     return;
   }
   const left = minutesBetween(state.now, state.session.expires_at);
   if (left <= 0) {
     box.classList.add("expired");
-    $("#session-state").textContent = "Sesión vencida";
-    $("#session-detail").textContent = "Pasaron los 15 minutos de la sesión. Debe verificar su identidad otra vez.";
+    $("#session-state").textContent = ui("sessionExpired");
+    $("#session-detail").textContent = ui("sessionExpiredDetail");
     meter.hidden = true;
     return;
   }
   box.classList.add("on");
-  $("#session-state").textContent = "Identidad verificada";
-  $("#session-detail").textContent = `Sesión ${state.session.session_ref}, vence a las ${hhmm(state.session.expires_at)} (reloj de este turno).`;
+  $("#session-state").textContent = ui("identityVerified");
+  $("#session-detail").textContent = ui("sessionDetail")(state.session.session_ref, hhmm(state.session.expires_at));
   meter.hidden = false;
   $("#session-fill").style.transform = `scaleX(${Math.max(0, Math.min(1, left / SESSION_MIN))})`;
 }
@@ -270,18 +470,27 @@ async function newConversation() {
   try { out = await api("/api/conversations", state.conv ? { language: "es", previous_id: state.conv } : { language: "es" }); }
   catch (e) { showError(e); return; }
   Object.assign(state, { conv: out.conversation_id, key: out.conversation_key, label: out.label, language: "es", session: null,
-    now: out.now, stages: {}, called: false, turnSeq: 0, busy: false, pendingDoc: null, signedDoc: null, lastDoc: null, lastCandidates: null });
+    now: out.now, stages: {}, called: false, turnSeq: 0, busy: false, pendingDoc: null, signedDoc: null, lastDoc: null, lastCandidates: null,
+    result: "stageResult", turns: [], openedAt: out.now, uiNotes: [] });
   $("#send").disabled = false;
   $("#composer-hint").hidden = true;
   $("#messages").innerHTML = "";
-  $("#trace").innerHTML = '<p class="trace-empty">Cuando el cliente escriba, aquí aparece cada paso del asistente.</p>';
+  renderTrace();
   $("#starters").hidden = false;
   $("#ticket-number").textContent = out.label;
-  $("#ticket-time").textContent = when(out.now, true, "es");
-  setDisplay("Tu turno", "Atención de reclamos");
-  $("#stage-result-name").textContent = "Resultado";
-  renderStages(); renderSession(); showSms(null);
-  add(el(`<div class="msg bot"><p>${esc(T.es.greeting)}</p><p class="alt">Também atendo em português.</p></div>`));
+  renderTicketTime();
+  setDisplay("dispYourTurn", "dispDesk");
+  renderStages(); renderSession(); renderComposer(); showSms(null);
+  add(el(`<div class="msg bot"><p>${esc(T.es.greeting)}</p><p class="alt" lang="pt">Também atendo em português.</p></div>`));
+}
+
+function renderTicketTime() { $("#ticket-time").textContent = state.openedAt ? when(state.openedAt, true, state.ui) : "—"; }
+// The composer belongs to the customer: its labels follow the conversation language.
+function renderComposer() {
+  $("#messages").lang = $("#composer").lang = state.language;
+  $("#input").placeholder = t("placeholder");
+  $("#input-label").textContent = t("inputLabel");
+  $("#send").setAttribute("aria-label", t("sendLabel"));
 }
 
 function showHint() { const h = $("#composer-hint"); h.textContent = t("waitHint"); h.hidden = false; }
@@ -319,7 +528,7 @@ async function runTurn(call) {
     typing.remove();
     if (state.conv === conv) {
       state.busy = false; $("#send").disabled = false; $("#composer-hint").hidden = true;
-      $("#input").placeholder = t("placeholder");
+      renderComposer();
       $("#input").focus();
       refreshClock(); refreshConsoleCount();
     }
@@ -350,7 +559,8 @@ function renderReply(out) {
     const proof = el(`<div class="proof"><span class="proof-label">${esc(t("backedBy"))}</span></div>`);
     const seq = state.turnSeq + 1;
     turn.tools.forEach((tool, i) => {
-      const chip = el(`<button type="button" class="rcpt${tool.ok ? "" : " err"}" title="${esc(tool.tool)} ${esc(tool.tool_call_id || "")}"><span class="dot"></span>${esc(TOOL[tool.tool] || tool.tool)}</button>`);
+      // The receipts sit inside the customer's bubble, so they follow the conversation language, not the interface's.
+      const chip = el(`<button type="button" class="rcpt${tool.ok ? "" : " err"}" title="${esc(tool.tool)} ${esc(tool.tool_call_id || "")}"><span class="dot"></span>${esc(tr(TOOL, tool.tool))}</button>`);
       chip.addEventListener("click", () => flashStep(seq, i));
       proof.appendChild(chip);
     });
@@ -372,18 +582,18 @@ function renderBlock(b) {
   if (b.type === "confirm") { setStage("identity", "done"); setStage("movement", "done"); setStage("confirm", "current"); return renderConfirm(b); }
   if (b.type === "case") {
     ["identity", "movement", "confirm"].forEach((s) => (state.stages[s] = "done"));
-    $("#stage-result-name").textContent = "Reclamo abierto";
+    state.result = "stageCase";
     setStage("result", "done");
-    setDisplay("Turno atendido", b.already_existed ? `Reclamo ${b.case_id} ya estaba abierto` : `Reclamo ${b.case_id} abierto`);
+    setDisplay("dispServed", b.already_existed ? "dispCaseExisting" : "dispCaseOpen", b.case_id);
     return renderCase(b);
   }
   if (b.type === "ticket") {
     if (state.stages.identity !== "done" && state.session) state.stages.identity = "done";
-    $("#stage-result-name").textContent = "Con especialista";
+    state.result = "stageSpecialist";
     ["movement", "confirm"].forEach((st) => { if (state.stages[st] === "current") state.stages[st] = ""; });
     setStage("result", "called");
     state.called = true;
-    setDisplay("Llamando", "Pase con un especialista", true);
+    setDisplay("dispCalling", "dispSeeSpecialist", null, true);
     return renderTicket(b);
   }
 }
@@ -610,35 +820,50 @@ function pollSms() {
 function policyText(p) {
   if (!p) return "";
   const bits = [];
-  if (p.eligible === true) bits.push("se puede reclamar");
-  if (p.eligible === false) bits.push("no se puede reclamar");
-  if (p.handoff_required === true) bits.push("requiere especialista");
-  if (p.handoff_reason) bits.push(`motivo: ${(REASON[p.handoff_reason] || p.handoff_reason).toLowerCase()}`);
-  if (p.next_action) bits.push(`siguiente: ${NEXT[p.next_action] || p.next_action.replace(/_/g, " ")}`);
+  if (p.eligible === true) bits.push(ui("eligible"));
+  if (p.eligible === false) bits.push(ui("notEligible"));
+  if (p.handoff_required === true) bits.push(ui("needsSpecialist"));
+  if (p.handoff_reason) bits.push(`${ui("reasonIs")}: ${uiMap("reasons", p.handoff_reason).toLowerCase()}`);
+  if (p.next_action) bits.push(`${ui("nextIs")}: ${ui("next")[p.next_action] || p.next_action.replace(/_/g, " ")}`);
   return bits.join("; ");
 }
 function classifierText(c) {
-  if (c.error) return `no respondió (${c.error})`;
-  const bits = [String(c.intent || "—").replace(/_/g, " ")];
-  if (typeof c.confidence === "number") bits.push(`confianza ${c.confidence.toLocaleString("es", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-  if (c.below_threshold) bits.push("bajo el umbral");
+  if (c.error) return ui("clsError")(c.error);
+  const bits = [ui("intent")[c.intent] || String(c.intent || "—").replace(/_/g, " ")];
+  if (typeof c.confidence === "number") bits.push(`${ui("clsConfidence")} ${c.confidence.toLocaleString(ui("locale"), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+  if (c.below_threshold) bits.push(ui("clsBelow"));
   return bits.join(", ");
 }
 function renderTurn(turn) {
   const box = $("#trace");
   box.querySelector(".trace-empty")?.remove();
   state.turnSeq += 1;
-  const seq = state.turnSeq;
-  const kind = turn.kind === "app_event" ? "inicio de sesión" : "mensaje del cliente";
+  state.turns.push(turn);
+  box.prepend(turnNode(turn, state.turnSeq));
+}
+// Every turn is kept, so a language switch draws the trace again; the steps nobody looked at yet stay lit.
+function renderTrace() {
+  const box = $("#trace");
+  const unseen = new Set([...box.querySelectorAll(".turn.lit")].map((n) => n.dataset.seq));
+  box.innerHTML = "";
+  if (!state.turns.length) { box.appendChild(el(`<p class="trace-empty">${esc(ui("traceEmpty"))}</p>`)); return; }
+  state.turns.forEach((turn, i) => {
+    const node = turnNode(turn, i + 1);
+    node.classList.toggle("lit", unseen.has(String(i + 1)));
+    box.prepend(node);
+  });
+}
+function turnNode(turn, seq) {
+  const kind = turn.kind === "app_event" ? ui("kindAppEvent") : ui("kindMessage");
   const tl = turn.timeline && turn.timeline.length ? turn.timeline : turn.model_calls.map((m) => ({ kind: "model", ms: m.latency_ms }));
   const total = tl.reduce((a, s) => a + s.ms, 0) || 1;
   const modelMs = tl.filter((s) => s.kind === "model").reduce((a, s) => a + s.ms, 0);
   const toolMs = tl.filter((s) => s.kind === "tool").reduce((a, s) => a + s.ms, 0);
   const tokens = turn.tokens.prompt + turn.tokens.completion;
   const node = el(`<article class="turn lit" data-seq="${seq}">
-    <div class="turn-top"><h3 class="turn-title">Paso ${seq} <span class="turn-kind">${kind}</span><span class="turn-new">Nuevo</span></h3><span class="turn-dur">${secs(turn.latency_ms)}</span></div>
-    <div class="timeline" role="img" aria-label="Modelo ${secs(modelMs)}, herramientas ${toolMs} ms"></div>
-    <div class="turn-stats"><span class="key"><i></i>Modelo ${secs(modelMs)}</span><span class="key tool"><i></i>Herramientas ${toolMs} ms</span><span>${turn.model_calls.length} llamada${turn.model_calls.length === 1 ? "" : "s"} al modelo</span><span>${tokens.toLocaleString("es")} tokens</span>${turn.cost_usd_est ? `<span>US$ ${turn.cost_usd_est.toFixed(4)}</span>` : ""}</div>
+    <div class="turn-top"><h3 class="turn-title">${esc(ui("step")(seq))} <span class="turn-kind">${esc(kind)}</span><span class="turn-new">${esc(ui("fresh"))}</span></h3><span class="turn-dur">${secs(turn.latency_ms)}</span></div>
+    <div class="timeline" role="img" aria-label="${esc(`${ui("model")} ${secs(modelMs)}, ${ui("tools").toLowerCase()} ${toolMs} ms`)}"></div>
+    <div class="turn-stats"><span class="key"><i></i>${esc(ui("model"))} ${secs(modelMs)}</span><span class="key tool"><i></i>${esc(ui("tools"))} ${toolMs} ms</span><span>${esc(ui("modelCalls")(turn.model_calls.length))}</span><span>${tokens.toLocaleString(ui("locale"))} tokens</span>${turn.cost_usd_est ? `<span>US$ ${turn.cost_usd_est.toFixed(4)}</span>` : ""}</div>
     <ol class="steps"></ol>
   </article>`);
   const bar = node.querySelector(".timeline");
@@ -646,32 +871,32 @@ function renderTurn(turn) {
     const seg = document.createElement("span");
     seg.className = s.kind === "model" ? "model" : "tool" + (s.ok === false ? " err" : "");
     seg.style.flex = `${Math.max(s.ms, 1) / total} 1 0`;
-    seg.title = s.kind === "model" ? `Modelo, ${secs(s.ms)}` : `${s.name}, ${s.ms} ms`;
+    seg.title = s.kind === "model" ? `${ui("model")}, ${secs(s.ms)}` : `${s.name}, ${s.ms} ms`;
     bar.appendChild(seg);
   });
   const steps = node.querySelector(".steps");
-  if (turn.classifier) steps.appendChild(el(`<li class="step"><span class="step-dot"></span><span class="step-name">Clasificador de intención</span><span class="step-ms">${turn.classifier.latency_ms != null ? `${esc(turn.classifier.latency_ms)} ms` : ""}</span><span class="step-detail">${esc(classifierText(turn.classifier))}</span></li>`));
+  if (turn.classifier) steps.appendChild(el(`<li class="step"><span class="step-dot"></span><span class="step-name">${esc(ui("classifier"))}</span><span class="step-ms">${turn.classifier.latency_ms != null ? `${esc(turn.classifier.latency_ms)} ms` : ""}</span><span class="step-detail">${esc(classifierText(turn.classifier))}</span></li>`));
   turn.tools.forEach((tool) => {
-    const detail = [tool.error ? `<span class="bad">${esc(ERR[tool.error] || tool.error)}</span>` : "", esc(policyText(tool.policy)), tool.runtime_fallback ? "lo llamó la app, no el modelo" : ""].filter(Boolean).join("; ");
+    const detail = [tool.error ? `<span class="bad">${esc(uiMap("err", tool.error))}</span>` : "", esc(policyText(tool.policy)), tool.runtime_fallback ? esc(ui("runtimeFallback")) : ""].filter(Boolean).join("; ");
     steps.appendChild(el(`<li class="step${tool.ok ? "" : " err"}"><span class="step-dot"></span>
-      <span class="step-name">${esc(TOOL[tool.tool] || tool.tool)}</span><span class="step-ms">${tool.latency_ms} ms</span>
+      <span class="step-name">${esc(uiMap("tool", tool.tool))}</span><span class="step-ms">${tool.latency_ms} ms</span>
       <span class="step-detail">${detail ? detail + "<br>" : ""}<code>${esc(tool.tool)}</code> <code>${esc(tool.tool_call_id || "")}</code></span></li>`));
   });
-  if (!turn.tools.length && !turn.classifier) steps.appendChild(el(`<li class="step"><span class="step-dot"></span><span class="step-name">Solo conversación</span><span class="step-ms"></span><span class="step-detail">El asistente respondió sin consultar datos.</span></li>`));
+  if (!turn.tools.length && !turn.classifier) steps.appendChild(el(`<li class="step"><span class="step-dot"></span><span class="step-name">${esc(ui("chatOnly"))}</span><span class="step-ms"></span><span class="step-detail">${esc(ui("chatOnlyDetail"))}</span></li>`));
   if (turn.fallback) node.appendChild(el(`<p class="turn-flag">${esc(fallbackText(turn))}</p>`));
-  if (turn.unverified_ids_in_reply && turn.unverified_ids_in_reply.length) node.appendChild(el(`<p class="turn-flag">La respuesta menciona ${esc(turn.unverified_ids_in_reply.join(", "))} sin respaldo de una herramienta.</p>`));
+  if (turn.unverified_ids_in_reply && turn.unverified_ids_in_reply.length) node.appendChild(el(`<p class="turn-flag">${esc(ui("unverifiedIds")(turn.unverified_ids_in_reply.join(", ")))}</p>`));
   const clear = () => node.classList.remove("lit");
   node.addEventListener("mouseenter", clear);
   node.addEventListener("focusin", clear);
   node.tabIndex = -1;
-  box.prepend(node);
+  return node;
 }
 function fallbackText(turn) {
   const handed = turn.tools.some((x) => x.runtime_fallback && x.tool === "handoff_to_human" && x.ok);
-  if (turn.fallback === "static_fallback") return "Respuesta fija: no se pudo registrar el ticket y el cliente recibió un mensaje para contactar al banco.";
-  if (handed) return "Respuesta de respaldo: el modelo falló y la app pasó el caso a un especialista.";
-  if (String(turn.fallback).startsWith("max_model_calls:repeated")) return "Respuesta fija: el modelo repitió la misma llamada y la app cortó el turno, sin crear un ticket.";
-  return "Respuesta de respaldo: el modelo falló y la app respondió con un texto fijo, sin crear un ticket nuevo.";
+  if (turn.fallback === "static_fallback") return ui("fbStatic");
+  if (handed) return ui("fbHanded");
+  if (String(turn.fallback).startsWith("max_model_calls:repeated")) return ui("fbRepeated");
+  return ui("fbGeneric");
 }
 function flashStep(seq, i) {
   const node = document.querySelector(`.turn[data-seq="${seq}"]`);
@@ -686,14 +911,15 @@ function flashStep(seq, i) {
 function renderPersonas() {
   const box = $("#personas");
   box.innerHTML = "";
-  if (!state.personas.length) { box.innerHTML = `<li class="sheet-note">Corre <code>python -m app.build_personas</code> para crear los clientes de prueba.</li>`; return; }
-  const country = { MX: "México", CO: "Colombia", AR: "Argentina" };
+  if (!state.cfg) return;  // the test customers come with the config
+  if (!state.personas.length) { box.innerHTML = `<li class="sheet-note">${ui("personasMissing")("<code>python -m app.build_personas</code>")}</li>`; return; }
   state.personas.forEach((p) => {
-    const li = el(`<li class="persona"><span class="persona-cc" title="${esc(country[p.country_code] || p.country_code)}">${esc(p.country_code)}</span>
-      <span class="persona-name">${esc(p.first_name)}${p.customer_status !== "Active" ? `<span class="persona-flag">${p.customer_status === "Suspended" ? "Suspendida" : esc(p.customer_status)}</span>` : ""}</span>
-      <span class="persona-story">${esc((p.story || {}).es || "")}</span>
+    const story = (p.story || {})[state.ui] || ui("stories")[(p.story || {}).es] || (p.story || {}).es || "";
+    const li = el(`<li class="persona"><span class="persona-cc" title="${esc(uiMap("countries", p.country_code))}">${esc(p.country_code)}</span>
+      <span class="persona-name">${esc(p.first_name)}${p.customer_status !== "Active" ? `<span class="persona-flag">${esc(p.customer_status === "Suspended" ? ui("suspended") : p.customer_status)}</span>` : ""}</span>
+      <span class="persona-story">${esc(story)}</span>
       <span class="persona-doc">${esc(p.document_type)} ${esc(p.document_number)}</span>
-      <button type="button" class="btn">Usar</button></li>`);
+      <button type="button" class="btn">${esc(ui("use"))}</button></li>`);
     li.querySelector("button").addEventListener("click", async () => {
       closeSheet();
       // Another customer never signs in inside a conversation that already has one: start a new turn first.
@@ -715,24 +941,29 @@ async function advanceClock() {
   catch (e) { showError(e); return; }
   state.now = out.now;
   renderSession();
-  if (out.added_minutes > 0) note(`Reloj de este turno adelantado ${out.added_minutes} minutos: ahora son las ${hhmm(out.now)}. Los otros turnos no cambian.`, "warn", "clock");
-  else note(`Este turno ya llegó al máximo de ${out.max_offset_minutes} minutos de adelanto.`, "warn", "clock");
+  if (out.added_minutes > 0) uiNote("clockMoved", [out.added_minutes, hhmm(out.now)], "warn", "clock");
+  else uiNote("clockMax", [out.max_offset_minutes], "warn", "clock");
 }
 
 // ---- specialist console ------------------------------------------------------------------------------------------------------
+// The last answer is kept, so a language switch draws the console again without asking the server.
 async function loadConsole() {
-  let out;
-  try { out = await api("/api/console"); }
-  catch { $("#calls").innerHTML = '<li><p class="empty">No se pudo leer la consola. Vuelve a intentarlo con Actualizar.</p></li>'; return; }
-  const calls = $("#calls"), cases = $("#cases");
-  calls.innerHTML = out.tickets.length ? "" : '<li><p class="empty">Todavía nadie fue llamado a un especialista.</p></li>';
+  try { state.board = await api("/api/console"); state.boardError = false; }
+  catch { state.boardError = true; }
+  renderConsole();
+}
+function renderConsole() {
+  const calls = $("#calls"), cases = $("#cases"), out = state.board, lang = state.ui;
+  if (state.boardError) { calls.innerHTML = `<li><p class="empty">${esc(ui("consoleError"))}</p></li>`; return; }
+  if (!out) return;
+  calls.innerHTML = out.tickets.length ? "" : `<li><p class="empty">${esc(ui("noCalls"))}</p></li>`;
   out.tickets.forEach((r) => {
     const fresh = !state.seen.has(r.ticket_id);
     const li = el(`<li><button type="button" class="call${fresh ? " lit" : ""}">
-      <span class="call-turn${r.turn_label ? "" : " old"}">${esc(r.turn_label || "Previo")}</span>
-      <span class="call-reason">${esc(REASON[r.reason_code] || r.reason_code)}</span>
-      <span class="call-time">${esc(when(r.created_at, true, "es"))}</span>
-      <span class="call-meta"><span>${esc(tr(QUEUE, r.queue, "es"))}</span><span>${r.identity_verified ? "Identidad verificada" : "Sin identificar"}</span><span>${r.language === "pt" ? "Portugués" : "Español"}</span>${r.priority ? `<span class="prio ${esc(r.priority)}">${esc(tr(PRIO, r.priority, "es"))}</span>` : ""}</span>
+      <span class="call-turn${r.turn_label ? "" : " old"}">${esc(r.turn_label || ui("earlier"))}</span>
+      <span class="call-reason">${esc(uiMap("reasons", r.reason_code))}</span>
+      <span class="call-time">${esc(when(r.created_at, true, lang))}</span>
+      <span class="call-meta"><span>${esc(tr(QUEUE, r.queue, lang))}</span><span>${esc(r.identity_verified ? ui("identityVerified") : ui("notIdentified"))}</span><span>${esc(ui("langName")[r.language === "pt" ? "pt" : "es"])}</span>${r.priority ? `<span class="prio ${esc(r.priority)}">${esc(tr(PRIO, r.priority, lang))}</span>` : ""}</span>
     </button></li>`);
     const btn = li.querySelector("button");
     if (state.ticketSel === r.ticket_id) btn.setAttribute("aria-current", "true");
@@ -744,57 +975,57 @@ async function loadConsole() {
     });
     calls.appendChild(li);
   });
-  cases.innerHTML = out.cases.length ? "" : '<tr><td colspan="6" class="empty-row">Todavía no se abrió ningún reclamo.</td></tr>';
+  cases.innerHTML = out.cases.length ? "" : `<tr><td colspan="6" class="empty-row">${esc(ui("noCases"))}</td></tr>`;
   out.cases.forEach((c) => cases.appendChild(el(`<table><tbody><tr>
-    <td class="nowrap"><code>${esc(c.case_id)}</code></td><td class="nowrap">${esc(c.turn_label || "Previo")}</td><td>${esc(tr(DISPUTE, c.dispute_type, "es") || c.subcategory)}</td>
-    <td class="num">${esc(money(c.amount, c.currency))}</td><td><span class="prio ${esc(c.priority)}">${esc(tr(PRIO, c.priority, "es"))}</span></td><td>${esc(when(c.first_response_due_at, true, "es"))}</td>
+    <td class="nowrap"><code>${esc(c.case_id)}</code></td><td class="nowrap">${esc(c.turn_label || ui("earlier"))}</td><td>${esc(tr(DISPUTE, c.dispute_type, lang) || c.subcategory)}</td>
+    <td class="num">${esc(money(c.amount, c.currency, ui("moneyLocale")))}</td><td><span class="prio ${esc(c.priority)}">${esc(tr(PRIO, c.priority, lang))}</span></td><td>${esc(when(c.first_response_due_at, true, lang))}</td>
   </tr></tbody></table>`).querySelector("tr")));
   const sel = out.tickets.find((r) => r.ticket_id === state.ticketSel);
   if (sel) showFile(sel);
   setCount(out.tickets.filter((x) => !state.seen.has(x.ticket_id)).length);
 }
 function items(list) {
-  return list && list.length ? `<ul>${list.map((x) => `<li>${esc(typeof x === "string" ? x : JSON.stringify(x))}</li>`).join("")}</ul>` : '<p class="none">Nada registrado.</p>';
+  return list && list.length ? `<ul>${list.map((x) => `<li>${esc(typeof x === "string" ? x : JSON.stringify(x))}</li>`).join("")}</ul>` : `<p class="none">${esc(ui("nothing"))}</p>`;
 }
 function showFile(r) {
-  const a = r.agent_reported || {}, pkg = a.package || a, sv = r.service_verified || {};
+  const a = r.agent_reported || {}, pkg = a.package || a, sv = r.service_verified || {}, lang = state.ui;
   const evidence = sv.evidence || [];
   const ev = evidence.map((e) => {
     const pd = e.policy_decision || {};
     const ok = e.outcome === "ok";
-    const bits = [ok ? "Correcto" : (ERR[e.error_code] || e.error_code || e.outcome), pd.handoff_reason ? `motivo: ${(REASON[pd.handoff_reason] || pd.handoff_reason).toLowerCase()}` : "", pd.next_action ? `siguiente: ${NEXT[pd.next_action] || pd.next_action}` : ""].filter(Boolean).join("; ");
-    return `<li><span class="step-dot" style="background:var(--${ok ? "green" : "red"})"></span><span><strong>${esc(TOOL[e.tool] || e.tool)}</strong>, ${esc(bits)}<br><code>${esc(e.tool)} ${esc(e.tool_call_id || "")}</code></span></li>`;
+    const bits = [ok ? ui("ok") : (ui("err")[e.error_code] || e.error_code || e.outcome), pd.handoff_reason ? `${ui("reasonIs")}: ${uiMap("reasons", pd.handoff_reason).toLowerCase()}` : "", pd.next_action ? `${ui("nextIs")}: ${uiMap("next", pd.next_action)}` : ""].filter(Boolean).join("; ");
+    return `<li><span class="step-dot" style="background:var(--${ok ? "green" : "red"})"></span><span><strong>${esc(uiMap("tool", e.tool))}</strong>, ${esc(bits)}<br><code>${esc(e.tool)} ${esc(e.tool_call_id || "")}</code></span></li>`;
   });
   const draft = sv.draft ? { ...(sv.draft.case_fields || {}), ...sv.draft } : null;
-  if (draft) ev.push(`<li><span class="step-dot"></span><span>Borrador de reclamo adjunto${draft.transaction_id ? ` <code>${esc(draft.transaction_id)}</code>` : ""}${draft.amount != null ? `, ${esc(money(draft.amount, draft.currency))}` : ""}</span></li>`);
-  if ((sv.dropped_evidence || []).length) ev.push(`<li><span class="step-dot" style="background:var(--red)"></span><span>${sv.dropped_evidence.length} evidencia(s) descartada(s) porque el servicio no pudo comprobarlas</span></li>`);
+  if (draft) ev.push(`<li><span class="step-dot"></span><span>${esc(ui("draft"))}${draft.transaction_id ? ` <code>${esc(draft.transaction_id)}</code>` : ""}${draft.amount != null ? `, ${esc(money(draft.amount, draft.currency, ui("moneyLocale")))}` : ""}</span></li>`);
+  if ((sv.dropped_evidence || []).length) ev.push(`<li><span class="step-dot" style="background:var(--red)"></span><span>${esc(ui("dropped")(sv.dropped_evidence.length))}</span></li>`);
   const warnings = [];
-  if (!evidence.length) warnings.push("El servicio no recibió evidencia comprobable para esta transferencia: revisa la conversación antes de actuar.");
-  if (r.reason_check && r.reason_check !== "consistent") warnings.push(`Motivo: ${(REASON_CHECK[r.reason_check] || r.reason_check).toLowerCase()}.`);
+  if (!evidence.length) warnings.push(ui("noEvidence"));
+  if (r.reason_check && r.reason_check !== "consistent") warnings.push(ui("reasonWarn")(uiMap("reasonCheck", r.reason_check).toLowerCase()));
   $("#file").innerHTML = `<div class="file-head">
-      <span class="file-turn${r.turn_label ? "" : " old"}">${esc(r.turn_label || "Previo")}</span>
-      <div><h2>${esc(REASON[r.reason_code] || r.reason_code)}</h2><p>Ticket <code>${esc(r.ticket_id)}</code>, cola ${esc(tr(QUEUE, r.queue, "es").toLowerCase())}</p></div>
+      <span class="file-turn${r.turn_label ? "" : " old"}">${esc(r.turn_label || ui("earlier"))}</span>
+      <div><h2>${esc(uiMap("reasons", r.reason_code))}</h2><p>${esc(ui("ticket"))} <code>${esc(r.ticket_id)}</code>, ${esc(ui("queueOf")(tr(QUEUE, r.queue, lang).toLowerCase()))}</p></div>
     </div>
     <dl class="file-facts">
-      <dt>Cliente</dt><dd>${r.identity_verified ? `Identidad verificada, referencia <code>${esc(r.customer_ref)}</code>` : "Sin identificar"}</dd>
-      <dt>Idioma</dt><dd>${r.language === "pt" ? "Portugués" : "Español"}</dd>
-      ${r.priority ? `<dt>Prioridad</dt><dd><span class="prio ${esc(r.priority)}">${esc(tr(PRIO, r.priority, "es"))}</span>${r.first_response_hours != null ? `, primera respuesta en ${esc(r.first_response_hours)} h` : ""}</dd>` : ""}
-      <dt>Motivo</dt><dd>${esc(REASON_CHECK[r.reason_check] || r.reason_check || "—")}</dd>
-      <dt>Recibido</dt><dd>${esc(when(r.created_at, true, "es"))}</dd>
+      <dt>${esc(ui("customer"))}</dt><dd>${r.identity_verified ? `${esc(ui("verifiedRef"))} <code>${esc(r.customer_ref)}</code>` : esc(ui("notIdentified"))}</dd>
+      <dt>${esc(ui("language"))}</dt><dd>${esc(ui("langName")[r.language === "pt" ? "pt" : "es"])}</dd>
+      ${r.priority ? `<dt>${esc(ui("priority"))}</dt><dd><span class="prio ${esc(r.priority)}">${esc(tr(PRIO, r.priority, lang))}</span>${r.first_response_hours != null ? esc(ui("firstResponseIn")(r.first_response_hours)) : ""}</dd>` : ""}
+      <dt>${esc(ui("reason"))}</dt><dd>${esc(r.reason_check ? uiMap("reasonCheck", r.reason_check) : "—")}</dd>
+      <dt>${esc(ui("received"))}</dt><dd>${esc(when(r.created_at, true, lang))}</dd>
     </dl>
     <section class="file-group verified" aria-labelledby="file-verified">
-      <h3 id="file-verified">${icon("check")}Comprobado por el servicio</h3>
+      <h3 id="file-verified">${icon("check")}${esc(ui("checked"))}</h3>
       ${warnings.map((w) => `<p class="file-warn">${esc(w)}</p>`).join("")}
-      ${ev.length ? `<ul class="evidence">${ev.join("")}</ul>` : '<p class="none">Nada registrado.</p>'}
-      <details class="raw"><summary>Registro completo del servicio</summary><pre>${esc(JSON.stringify(sv, null, 2))}</pre></details>
+      ${ev.length ? `<ul class="evidence">${ev.join("")}</ul>` : `<p class="none">${esc(ui("nothing"))}</p>`}
+      <details class="raw"><summary>${esc(ui("rawRecord"))}</summary><pre>${esc(JSON.stringify(sv, null, 2))}</pre></details>
     </section>
     <section class="file-group claimed" aria-labelledby="file-claimed">
-      <h3 id="file-claimed">Según el asistente (sin verificar)</h3>
-      <p class="file-note">Lo escribió el modelo para ti. El servicio no lo comprobó: contrástalo con lo de arriba antes de actuar.</p>
-      <h4>Lo que necesita el cliente</h4><p>${esc(r.request_summary || pkg.request_summary || "—")}</p>
-      <h4>Hechos que reporta</h4>${items(pkg.verified_facts)}
-      <h4>Lo que hizo</h4>${items(pkg.actions_taken)}
-      <h4>Para revisar</h4>${items(pkg.open_questions)}
+      <h3 id="file-claimed">${esc(ui("claimed"))}</h3>
+      <p class="file-note">${esc(ui("claimedNote"))}</p>
+      <h4>${esc(ui("needs"))}</h4><p>${esc(r.request_summary || pkg.request_summary || "—")}</p>
+      <h4>${esc(ui("facts"))}</h4>${items(pkg.verified_facts)}
+      <h4>${esc(ui("did"))}</h4>${items(pkg.actions_taken)}
+      <h4>${esc(ui("review"))}</h4>${items(pkg.open_questions)}
     </section>`;
 }
 function setCount(n) { const c = $("#console-count"); c.hidden = !n; c.textContent = n; }
@@ -814,11 +1045,44 @@ function showView(name) {
   if (isConsole) loadConsole();
 }
 
+// ---- interface language switch -------------------------------------------------------------------------------------------
+function savedUi() {
+  try { const v = localStorage.getItem(UI_KEY); return UI[v] ? v : "en"; }
+  catch { return "en"; }  // storage blocked: English
+}
+function setUi(lang) {
+  if (!UI[lang] || lang === state.ui) return;
+  state.ui = lang;
+  try { localStorage.setItem(UI_KEY, lang); } catch { /* storage blocked: the choice lasts until the page reloads */ }
+  applyUi();
+}
+// Writes every presenter and specialist text again in the interface language. The chat is left as it is.
+function applyUi() {
+  document.documentElement.lang = state.ui;
+  document.title = ui("title");
+  document.querySelectorAll("[data-ui]").forEach((n) => { n.textContent = ui(n.dataset.ui); });
+  document.querySelectorAll("[data-ui-aria]").forEach((n) => n.setAttribute("aria-label", ui(n.dataset.uiAria)));
+  document.querySelectorAll("[data-ui-title]").forEach((n) => { n.title = ui(n.dataset.uiTitle); });
+  document.querySelectorAll("#lang [data-lang]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.lang === state.ui)));
+  renderDisplay(); renderStages(); renderSession(); renderTicketTime(); renderClassifier(); renderTrace(); renderPersonas();
+  state.uiNotes = state.uiNotes.filter((x) => x.node.isConnected);
+  state.uiNotes.forEach((x) => x.paint());
+  if (state.board || state.boardError) renderConsole();
+}
+function renderClassifier() {
+  const c = state.cfg;
+  $("#classifier-status").textContent = !c ? ui("classifierNone") : c.classifier ? ui("classifierOn")(c.classifier) : ui("classifierOff");
+}
+
 // ---- boot ------------------------------------------------------------------------------------------------------------------
 async function boot() {
+  state.ui = savedUi();
+  applyUi();
+  document.querySelectorAll("#lang [data-lang]").forEach((b) => b.addEventListener("click", () => setUi(b.dataset.lang)));
   let cfg;
   try { cfg = await api("/api/config"); }
   catch (e) { showError(e); return; }
+  state.cfg = cfg;
   state.personas = cfg.personas || [];
   state.demo = cfg.demo_controls !== false;
   state.console = cfg.console !== false;
@@ -827,9 +1091,7 @@ async function boot() {
   $("#model-name").textContent = (cfg.model || "—").replace("databricks-", "");
   $("#btn-personas").hidden = !state.demo;
   $("#btn-clock").hidden = !state.demo;
-  $("#classifier-status").textContent = cfg.classifier
-    ? `Clasificador de intención: ${cfg.classifier}. Su resultado es una pista para el asistente, no una decisión.`
-    : "Clasificador de intención: no cargado (se entrena con python -m src.classifier.train).";
+  renderClassifier();
   const input = $("#input");
   if (state.limits.max_text) input.maxLength = state.limits.max_text;
   renderPersonas();

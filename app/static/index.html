@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light">
-<title>Expediente</title>
+<title>Expediente · Customer service</title>
 <link rel="preload" href="/static/fonts/atkinson-hyperlegible-next.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/static/fonts/doto.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/fonts/fonts.css">
@@ -23,121 +23,130 @@
     <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7.5V12l3 2"/></symbol>
     <symbol id="i-handoff" viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><path d="M3.5 18.5c.6-2.7 2.3-4.2 4.5-4.2"/><path d="M13 13.5h7.5M17.5 10.5l3 3-3 3"/></symbol>
     <symbol id="i-doc" viewBox="0 0 24 24"><path d="M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10.5a.5.5 0 0 1-.5-.5V4a.5.5 0 0 1 .5-.5z"/><path d="M14 3.5V8h4M9.5 12.5h5M9.5 16h5"/></symbol>
+    <symbol id="i-talk" viewBox="0 0 24 24"><path d="M4.5 6.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2H11l-4 3.5V16H6.5a2 2 0 0 1-2-2z"/><path d="M8.5 9h7M8.5 12h4.5"/></symbol>
   </defs>
 </svg>
 
 <div class="shell">
-  <aside class="rail" aria-label="Turno y navegación">
+  <aside class="rail" data-ui-aria="railLabel" aria-label="Turn and navigation">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
-      <span class="brand-text"><span class="brand-name">Expediente</span><span class="brand-bank">LATAM Bank, datos sintéticos</span></span>
+      <span class="brand-text"><span class="brand-name">Expediente</span><span class="brand-bank" data-ui="brandBank">LATAM Bank, synthetic data</span></span>
     </div>
 
-    <nav class="views" aria-label="Vistas">
-      <button type="button" id="nav-customer" aria-current="page">Atención al cliente</button>
-      <button type="button" id="nav-console">Consola del especialista <span class="count" id="console-count" hidden></span></button>
+    <nav class="views" data-ui-aria="viewsLabel" aria-label="Views">
+      <button type="button" id="nav-customer" aria-current="page"><span data-ui="navCustomer">Customer service</span></button>
+      <button type="button" id="nav-console"><span data-ui="navConsole">Specialist console</span> <span class="count" id="console-count" hidden></span></button>
     </nav>
 
-    <section class="display" id="display" aria-live="polite" aria-label="Pantalla de turno">
-      <p class="display-label" id="display-label">Tu turno</p>
+    <section class="display" id="display" aria-live="polite" data-ui-aria="displayLabel" aria-label="Turn display">
+      <p class="display-label" id="display-label">Your turn</p>
       <p class="display-number" id="turn-number">R-201</p>
-      <p class="display-caption" id="display-caption">Atención de reclamos</p>
+      <p class="display-caption" id="display-caption">Disputes desk</p>
     </section>
 
-    <ol class="stages" id="stages" aria-label="Etapas del turno">
-      <li data-stage="identity"><span class="pip" aria-hidden="true"></span><span class="stage-name">Identificación</span></li>
-      <li data-stage="movement"><span class="pip" aria-hidden="true"></span><span class="stage-name">Movimiento</span></li>
-      <li data-stage="confirm"><span class="pip" aria-hidden="true"></span><span class="stage-name">Confirmación</span></li>
-      <li data-stage="result"><span class="pip" aria-hidden="true"></span><span class="stage-name" id="stage-result-name">Resultado</span></li>
+    <ol class="stages" id="stages" data-ui-aria="stagesLabel" aria-label="Turn stages">
+      <li data-stage="identity"><span class="pip" aria-hidden="true"></span><span class="stage-name" data-ui="stageIdentity">Identification</span></li>
+      <li data-stage="movement"><span class="pip" aria-hidden="true"></span><span class="stage-name" data-ui="stageMovement">Movement</span></li>
+      <li data-stage="confirm"><span class="pip" aria-hidden="true"></span><span class="stage-name" data-ui="stageConfirm">Confirmation</span></li>
+      <li data-stage="result"><span class="pip" aria-hidden="true"></span><span class="stage-name" id="stage-result-name">Result</span></li>
     </ol>
 
     <div class="session" id="session">
-      <p class="session-state" id="session-state">Sin identificar</p>
+      <p class="session-state" id="session-state">Not identified</p>
       <div class="session-meter" id="session-meter" hidden><span id="session-fill"></span></div>
-      <p class="session-detail" id="session-detail">El cliente verifica su identidad en el formulario seguro.</p>
+      <p class="session-detail" id="session-detail">The customer verifies their identity in the secure form.</p>
     </div>
 
     <div class="rail-foot">
       <div class="sms" id="sms" hidden aria-live="polite">
         <svg class="ic" aria-hidden="true"><use href="#i-phone"/></svg>
         <div>
-          <p class="sms-from">SMS de LATAM Bank, teléfono simulado</p>
-          <p class="sms-text">Tu código es <span class="sms-code" id="sms-code"></span></p>
+          <p class="sms-from" data-ui="smsFrom">SMS from LATAM Bank, simulated phone</p>
+          <p class="sms-text"><span data-ui="smsText">Your code is</span> <span class="sms-code" id="sms-code"></span></p>
         </div>
       </div>
-      <div class="tools" aria-label="Herramientas de demo">
-        <button type="button" class="rail-btn" id="btn-personas"><svg class="ic" aria-hidden="true"><use href="#i-people"/></svg>Clientes de prueba</button>
-        <button type="button" class="rail-btn" id="btn-new"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg>Nuevo turno</button>
-        <button type="button" class="rail-btn" id="btn-clock" title="Adelanta 16 minutos el reloj de este turno, y solo de este, para mostrar que la sesión vence"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg>Adelantar 16 min</button>
+      <div class="tools" data-ui-aria="toolsLabel" aria-label="Demo controls">
+        <button type="button" class="rail-btn" id="btn-personas"><svg class="ic" aria-hidden="true"><use href="#i-people"/></svg><span data-ui="testCustomers">Test customers</span></button>
+        <button type="button" class="rail-btn" id="btn-new"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span data-ui="newTurn">New turn</span></button>
+        <button type="button" class="rail-btn" id="btn-clock" data-ui-title="clockTip" title="Moves this turn's clock, and only this one, 16 minutes ahead to show the session expiring"><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg><span data-ui="clockBtn">Advance 16 min</span></button>
+      </div>
+      <div class="lang" id="lang" role="group" aria-labelledby="lang-label">
+        <span class="lang-label" id="lang-label" data-ui="langLabel">Interface language</span>
+        <span class="lang-seg">
+          <button type="button" data-lang="en" lang="en" aria-label="English" aria-pressed="true">EN</button>
+          <button type="button" data-lang="es" lang="es" aria-label="Español" aria-pressed="false">ES</button>
+        </span>
       </div>
       <dl class="meta">
-        <div><dt>Reloj de este turno</dt><dd id="clock-now">—</dd></div>
-        <div><dt>Modelo</dt><dd id="model-name">—</dd></div>
+        <div><dt data-ui="clockLabel">This turn's clock</dt><dd id="clock-now">—</dd></div>
+        <div><dt data-ui="modelLabel">Model</dt><dd id="model-name">—</dd></div>
       </dl>
     </div>
   </aside>
 
   <main class="work" id="view-customer">
-    <section class="chat" aria-label="Chat del cliente">
+    <section class="chat" data-ui-aria="chatLabel" aria-label="Customer chat">
       <header class="ticket">
         <div>
-          <h1 class="ticket-title">Turno <span id="ticket-number">R-201</span></h1>
-          <p class="ticket-sub">Reclamos por cargos no reconocidos y cobros incorrectos</p>
+          <h1 class="ticket-title"><span data-ui="turnWord">Turn</span> <span id="ticket-number">R-201</span></h1>
+          <p class="ticket-sub" data-ui="ticketSub">Disputes over unrecognized charges and incorrect fees</p>
+          <p class="ticket-langs"><svg class="ic" aria-hidden="true"><use href="#i-talk"/></svg><span data-ui="langNote">The assistant serves customers in Spanish and Portuguese.</span></p>
         </div>
         <p class="ticket-time" id="ticket-time">—</p>
       </header>
-      <div class="messages" id="messages"></div>
-      <div class="starters" id="starters">
+      <div class="messages" id="messages" lang="es"></div>
+      <div class="starters" id="starters" lang="es">
         <button type="button">Me aparece un cobro que no reconozco</button>
         <button type="button">Me cobraron una comisión que no corresponde</button>
         <button type="button">Perdí mi tarjeta</button>
-        <button type="button">Tem uma compra no meu cartão que eu não fiz</button>
+        <button type="button" lang="pt">Tem uma compra no meu cartão que eu não fiz</button>
       </div>
-      <form class="composer" id="composer">
-        <label for="input" class="sr-only">Mensaje para el asistente</label>
+      <form class="composer" id="composer" lang="es">
+        <label for="input" class="sr-only" id="input-label">Mensaje para el asistente</label>
         <textarea id="input" rows="1" placeholder="Escribe tu mensaje" autocomplete="off" maxlength="1000"></textarea>
         <button class="send" id="send" type="submit" aria-label="Enviar mensaje"><svg class="ic" aria-hidden="true"><use href="#i-send"/></svg></button>
       </form>
       <p class="composer-hint" id="composer-hint" role="status" hidden></p>
     </section>
 
-    <section class="trace" aria-label="Traza del asistente">
+    <section class="trace" data-ui-aria="traceLabel" aria-label="Assistant trace">
       <header class="trace-head">
-        <h2>Traza</h2>
-        <p>Cada herramienta que usó el asistente, con su resultado y lo que tardó. El modelo nunca ve el documento, el código ni el número de cliente.</p>
-        <p class="trace-pending" id="classifier-status">Clasificador de intención: —</p>
+        <h2 data-ui="traceTitle">Trace</h2>
+        <p data-ui="traceLede">Every tool the assistant used, with its result and how long it took. The model never sees the document, the code or the customer number.</p>
+        <p class="trace-pending" id="classifier-status">Intent classifier: —</p>
       </header>
-      <div class="turns" id="trace"><p class="trace-empty">Cuando el cliente escriba, aquí aparece cada paso del asistente.</p></div>
+      <div class="turns" id="trace"><p class="trace-empty">When the customer writes, each step the assistant takes appears here.</p></div>
     </section>
   </main>
 
   <main class="work console" id="view-console" hidden>
-    <section class="board" aria-label="Llamados a especialista">
+    <section class="board" data-ui-aria="boardTitle" aria-label="Specialist calls">
       <header class="board-head">
-        <h1>Llamados a especialista</h1>
-        <button type="button" class="ghost" id="btn-refresh">Actualizar</button>
+        <h1 data-ui="boardTitle">Specialist calls</h1>
+        <button type="button" class="ghost" id="btn-refresh" data-ui="refresh">Refresh</button>
       </header>
       <ol class="calls" id="calls"></ol>
-      <h2 class="cases-title">Reclamos abiertos en el chat</h2>
+      <h2 class="cases-title" data-ui="casesTitle">Disputes opened in the chat</h2>
       <div class="table-wrap">
         <table class="cases">
-          <thead><tr><th scope="col">Caso</th><th scope="col">Turno</th><th scope="col">Tipo</th><th scope="col" class="num">Monto</th><th scope="col">Prioridad</th><th scope="col">Primera respuesta</th></tr></thead>
+          <thead><tr><th scope="col" data-ui="colCase">Case</th><th scope="col" data-ui="colTurn">Turn</th><th scope="col" data-ui="colType">Type</th><th scope="col" class="num" data-ui="colAmount">Amount</th><th scope="col" data-ui="colPriority">Priority</th><th scope="col" data-ui="colFirstResponse">First response</th></tr></thead>
           <tbody id="cases"></tbody>
         </table>
       </div>
     </section>
-    <section class="file" id="file" aria-label="Expediente">
-      <p class="file-empty">Elige un llamado para abrir su expediente.</p>
+    <section class="file" id="file" data-ui-aria="fileLabel" aria-label="Case file">
+      <p class="file-empty" data-ui="fileEmpty">Pick a call to open its case file.</p>
     </section>
   </main>
 </div>
 
 <div class="sheet" id="personas-sheet" role="dialog" aria-modal="false" aria-labelledby="personas-title" hidden>
   <header>
-    <h2 id="personas-title">Clientes de prueba</h2>
-    <button type="button" class="ghost" id="btn-close-personas" aria-label="Cerrar"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+    <h2 id="personas-title" data-ui="testCustomers">Test customers</h2>
+    <button type="button" class="ghost" id="btn-close-personas" data-ui-aria="close" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
   </header>
-  <p class="sheet-note">Clientes sintéticos del concurso. Usar uno completa el formulario seguro con su documento; si en este turno ya entró otro cliente, se abre un turno nuevo. El teléfono que muestra el código es simulado.</p>
+  <p class="sheet-note" data-ui="personasNote">Synthetic customers from the hackathon data. Using one fills the secure form with their document; if another customer already signed in on this turn, a new turn opens. The phone that shows the code is simulated.</p>
   <ul class="personas" id="personas"></ul>
 </div>
 
