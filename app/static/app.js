@@ -5,7 +5,7 @@ const state = {
   busy: false, smsTimer: null, ticketSel: null, seen: new Set(), stages: {}, called: false, turnSeq: 0,
   demo: true, console: true, limits: {}, pendingDoc: null, signedDoc: null, lastDoc: null, lastCandidates: null,
   ui: "en", display: { label: "dispYourTurn", caption: "dispDesk" }, result: "stageResult", turns: [], openedAt: null,
-  cfg: null, uiNotes: [], board: null, boardError: false,
+  cfg: null, uiNotes: [], board: null, boardError: false, dailyShown: false,
 };
 const $ = (sel) => document.querySelector(sel);
 const SESSION_MIN = 15;
@@ -34,6 +34,8 @@ const UI = {
     toolsLabel: "Demo controls", testCustomers: "Test customers", newTurn: "New turn", clockBtn: "Advance 16 min",
     clockTip: "Moves this turn's clock, and only this one, 16 minutes ahead to show the session expiring",
     langLabel: "Interface language", clockLabel: "This turn's clock", modelLabel: "Model",
+    publicNote: "Public demo on synthetic data · limited daily usage",
+    dailyLimit: "The public demo reached today's limit; it resets at 00:00 UTC.",
     chatLabel: "Customer chat", turnWord: "Turn", ticketSub: "Disputes over unrecognized charges and incorrect fees",
     langNote: "The assistant serves customers in Spanish and Portuguese.",
     clockMoved: (n, at) => `This turn's clock moved ${n} minutes ahead: it is now ${at}. Other turns do not change.`,
@@ -131,6 +133,8 @@ const UI = {
     toolsLabel: "Herramientas de demo", testCustomers: "Clientes de prueba", newTurn: "Nuevo turno", clockBtn: "Adelantar 16 min",
     clockTip: "Adelanta 16 minutos el reloj de este turno, y solo de este, para mostrar que la sesión vence",
     langLabel: "Idioma de la interfaz", clockLabel: "Reloj de este turno", modelLabel: "Modelo",
+    publicNote: "Demo pública con datos sintéticos · uso diario limitado",
+    dailyLimit: "La demo pública llegó al límite de hoy; se reinicia a las 00:00 UTC.",
     chatLabel: "Chat del cliente", turnWord: "Turno", ticketSub: "Reclamos por cargos no reconocidos y cobros incorrectos",
     langNote: "El asistente atiende a los clientes en español y portugués.",
     clockMoved: (n, at) => `Reloj de este turno adelantado ${n} minutos: ahora son las ${at}. Los otros turnos no cambian.`,
@@ -284,6 +288,7 @@ const T = {
     errServer: "El servidor tuvo un error al procesar el mensaje. Vuelve a intentarlo; si se repite, empieza un turno nuevo.",
     errServerBusy: "El servidor está atendiendo muchas conversaciones a la vez. Espera unos segundos y vuelve a intentarlo.",
     errNewLimit: (s) => `Se abrieron muchos turnos seguidos desde este navegador. Espera ${Math.ceil(s / 60)} min y vuelve a intentarlo.`,
+    errDaily: "Por hoy ya atendimos todas las consultas disponibles en esta demo. Vuelve a escribirnos después de las 00:00 UTC y con gusto te ayudamos.",
     placeholder: "Escribe tu mensaje", inputLabel: "Mensaje para el asistente", sendLabel: "Enviar mensaje",
   },
   pt: {
@@ -330,6 +335,7 @@ const T = {
     errServer: "O servidor teve um erro ao processar a mensagem. Tente de novo; se continuar, comece um novo atendimento.",
     errServerBusy: "O servidor está atendendo muitas conversas ao mesmo tempo. Espere alguns segundos e tente de novo.",
     errNewLimit: (s) => `Muitos atendimentos foram abertos seguidos neste navegador. Espere ${Math.ceil(s / 60)} min e tente de novo.`,
+    errDaily: "Por hoje já atendemos todas as consultas disponíveis nesta demonstração. Escreva de novo depois das 00:00 UTC e teremos prazer em ajudar.",
     placeholder: "Escreva sua mensagem", inputLabel: "Mensagem para o assistente", sendLabel: "Enviar mensagem",
   },
 };
@@ -471,7 +477,7 @@ async function newConversation() {
   catch (e) { showError(e); return; }
   Object.assign(state, { conv: out.conversation_id, key: out.conversation_key, label: out.label, language: "es", session: null,
     now: out.now, stages: {}, called: false, turnSeq: 0, busy: false, pendingDoc: null, signedDoc: null, lastDoc: null, lastCandidates: null,
-    result: "stageResult", turns: [], openedAt: out.now, uiNotes: [] });
+    result: "stageResult", turns: [], openedAt: out.now, uiNotes: [], dailyShown: false });
   $("#send").disabled = false;
   $("#composer-hint").hidden = true;
   $("#messages").innerHTML = "";
@@ -482,6 +488,16 @@ async function newConversation() {
   setDisplay("dispYourTurn", "dispDesk");
   renderStages(); renderSession(); renderComposer(); showSms(null);
   add(el(`<div class="msg bot"><p>${esc(T.es.greeting)}</p><p class="alt" lang="pt">Também atendo em português.</p></div>`));
+  if (out.daily_limit_reached) dailyLimitNotes();
+}
+
+// The public demo's daily cap of model turns: a note for the customer in the chat, and one for the presenter.
+const isDaily = (e) => e && e.status === 429 && e.detail && e.detail.code === "daily_limit";
+function dailyLimitNotes(withCustomerNote = true) {
+  if (state.dailyShown) return;
+  state.dailyShown = true;
+  if (withCustomerNote) note(t("errDaily"), "warn", "clock");
+  uiNote("dailyLimit", [], "warn", "clock");
 }
 
 function renderTicketTime() { $("#ticket-time").textContent = state.openedAt ? when(state.openedAt, true, state.ui) : "—"; }
@@ -541,6 +557,7 @@ function errorText(e) {
   if (e.status === 409) return t("errBusy");
   if (e.status === 429 && code === "turn_limit") return t("errTurns")(e.detail.max_turns);
   if (e.status === 429 && code === "too_many_conversations") return t("errNewLimit")(e.detail.retry_after_s || 60);
+  if (isDaily(e)) return t("errDaily");
   if (e.status === 503 && code === "server_busy") return t("errServerBusy");
   if (e.status === 413 || e.status === 422) return t("errTooLong");
   if (e.status === "timeout") return t("errTimeout");
@@ -550,6 +567,7 @@ function errorText(e) {
 function showError(e) {
   const n = add(el(`<div class="note warn" role="alert">${icon("clock")}<span>${esc(errorText(e))}</span></div>`));
   if (e.status === 404 || (e.status === 429 && e.detail.code === "turn_limit")) n.appendChild(newTurnButton());
+  if (isDaily(e)) dailyLimitNotes(false);
 }
 
 function renderReply(out) {
@@ -712,6 +730,7 @@ function startErrorText(out) {
   if (out.error === "VALIDATION_ERROR") return t("badDoc");
   if (out.error === "OTHER_CUSTOMER") return t("otherCustomer");
   if (out.error === "GONE") return t("err404");
+  if (out.error === "DAILY_LIMIT") return t("errDaily");
   return t("sendFailed");
 }
 
@@ -753,9 +772,10 @@ function renderAuth(expired, prefill = state.prefill) {
       const btn = form.querySelector("button"); btn.disabled = true;
       let out;
       try { out = await api(`/api/conversations/${conv}/auth/start`, doc); }
-      catch (e) { out = { ok: false, error: e.status === 404 ? "GONE" : "FAILED" }; }
+      catch (e) { out = { ok: false, error: e.status === 404 ? "GONE" : isDaily(e) ? "DAILY_LIMIT" : "FAILED" }; }
       btn.disabled = false;
       if (state.conv !== conv) return;
+      if (out.error === "DAILY_LIMIT") dailyLimitNotes(false);
       if (!out.ok) { fail(err, startErrorText(out), out.error === "OTHER_CUSTOMER" || out.error === "GONE"); return; }
       state.lastDoc = doc;
       state.pendingDoc = docKey(doc.document_type, doc.document_number);
@@ -1056,7 +1076,8 @@ function setUi(lang) {
   try { localStorage.setItem(UI_KEY, lang); } catch { /* storage blocked: the choice lasts until the page reloads */ }
   applyUi();
 }
-// Writes every presenter and specialist text again in the interface language. The chat is left as it is.
+// Writes every presenter and specialist text again in the interface language. The chat is left as it is, except for the
+// presenter's notes in it (demo clock, daily limit).
 function applyUi() {
   document.documentElement.lang = state.ui;
   document.title = ui("title");
@@ -1087,6 +1108,7 @@ async function boot() {
   state.demo = cfg.demo_controls !== false;
   state.console = cfg.console !== false;
   $("#nav-console").hidden = !state.console;
+  $("#public-note").hidden = !cfg.public_demo;
   state.limits = cfg.limits || {};
   $("#model-name").textContent = (cfg.model || "—").replace("databricks-", "");
   $("#btn-personas").hidden = !state.demo;

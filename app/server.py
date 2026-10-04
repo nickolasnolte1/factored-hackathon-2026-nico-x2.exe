@@ -15,6 +15,11 @@ client opens a bounded number of conversations, and a full registry ends only lo
 The service clock is a demo clock: it starts at the data's demo time and advances with wall time, and each
 conversation can be moved forward on its own. The simulated phone, the test customers and the clock button exist
 only while APP_DEMO_CONTROLS is on.
+
+Public demo settings, all off by default (the Hugging Face Space turns them on in app/space/Dockerfile):
+APP_DAILY_MODEL_TURNS caps the model turns of the whole app per UTC day, APP_TRUST_FORWARDED_FOR keys the
+per-client conversation limit on the first X-Forwarded-For address, APP_PUBLIC_DEMO shows a note in the sidebar, and
+APP_FRAME_ANCESTORS lets the listed origins frame the page.
 """
 import contextvars
 import hashlib
@@ -28,7 +33,7 @@ import threading
 import time
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -65,11 +70,11 @@ MAX_LABELS = 5000            # turn labels kept for the console after their conv
 CONSOLE_LIMIT = 100          # latest tickets and cases the console serves
 SWEEP_EVERY_S = 30
 CLIENT_HEADERS = ("x-forwarded-email", "x-forwarded-user")  # set by the Databricks Apps proxy
-SECURITY_HEADERS = [
-    (b"content-security-policy", b"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-                                 b"img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; "
-                                 b"base-uri 'self'; form-action 'self'; frame-ancestors 'none'"),
-    (b"x-content-type-options", b"nosniff"), (b"x-frame-options", b"DENY"), (b"referrer-policy", b"no-referrer")]
+MAX_CLIENT_KEY = 64          # characters kept of a forwarded address
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+       "font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; "
+       "frame-ancestors {}")
+FRAME_ORIGIN = re.compile(r"^https://(\*\.)?[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*(:\d{1,5})?$")
 # On top of the bank tools' demo limits (DEMO_LIMITS: sign-ins per document, calls per session): a conversation may
 # sign in again after its session expires, and takes up to APP_MAX_TURNS messages.
 APP_LIMITS = {"challenges_per_conversation": 6, "conversation_calls": 400}
@@ -235,11 +240,31 @@ class JsonOnly:
         await self.app(scope, receive, send)
 
 
-class SecurityHeaders:
-    """Content-Security-Policy (same-origin only, no framing) and nosniff on every response."""
+def security_headers(frame_ancestors=""):
+    """Same-origin CSP, nosniff and no referrer. Without frame_ancestors no page may frame the app; with a
+    space-separated list of https origins (APP_FRAME_ANCESTORS: the Hugging Face Space page shows the app in a frame)
+    only those may."""
+    origins = str(frame_ancestors or "").split()
+    bad = [o for o in origins if not FRAME_ORIGIN.match(o)]
+    if bad:
+        raise ValueError("APP_FRAME_ANCESTORS takes https origins separated by spaces, not: " + " ".join(bad))
+    headers = [(b"content-security-policy", CSP.format(" ".join(origins) or "'none'").encode("ascii")),
+               (b"x-content-type-options", b"nosniff"), (b"referrer-policy", b"no-referrer")]
+    if not origins:
+        headers.append((b"x-frame-options", b"DENY"))
+    return headers
 
-    def __init__(self, app):
+
+SECURITY_HEADERS = security_headers()
+
+
+class SecurityHeaders:
+    """Content-Security-Policy (same-origin only, no framing unless APP_FRAME_ANCESTORS names who may) and nosniff on
+    every response."""
+
+    def __init__(self, app, headers=None):
         self.app = app
+        self.headers = SECURITY_HEADERS if headers is None else headers
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -247,10 +272,63 @@ class SecurityHeaders:
 
         async def with_headers(message):
             if message["type"] == "http.response.start":
-                message = {**message, "headers": list(message.get("headers") or []) + SECURITY_HEADERS}
+                message = {**message, "headers": list(message.get("headers") or []) + self.headers}
             await send(message)
 
         await self.app(scope, receive, with_headers)
+
+
+class DailyCap:
+    """Public demo only: at most `limit` model turns (customer messages and sign-ins) per UTC day across the whole
+    app, so a public link cannot run up the model bill. 0 turns it off. The count lives in memory, so a restart
+    starts the day again. Days follow the real UTC date, never the demo clock."""
+
+    def __init__(self, limit=0, today=None):
+        self.limit = max(0, int(limit or 0))
+        self.today = today or (lambda: datetime.now(timezone.utc).date())
+        self._day, self._used = None, 0
+        self._lock = threading.Lock()
+
+    def _roll(self):
+        day = self.today()
+        if day != self._day:
+            self._day, self._used = day, 0
+        return day
+
+    def refusal(self):
+        resets_at = (self.today() + timedelta(days=1)).isoformat() + "T00:00:00Z"
+        return HTTPException(429, {"code": "daily_limit", "limit": self.limit, "resets_at": resets_at})
+
+    def reached(self):
+        if not self.limit:
+            return False
+        with self._lock:
+            self._roll()
+            return self._used >= self.limit
+
+    def check(self):
+        """429 daily_limit when today's turns are used up; counts nothing."""
+        if self.reached():
+            raise self.refusal()
+
+    def take(self):
+        """Count one model turn, or 429 daily_limit when none is left. Returns the day it was counted on."""
+        if not self.limit:
+            return None
+        with self._lock:
+            day = self._roll()
+            if self._used >= self.limit:
+                raise self.refusal()
+            self._used += 1
+            return day
+
+    def give_back(self, day):
+        """Return a turn that never reached the model (a sign-in with a wrong code), while it is still that day."""
+        if not self.limit or day is None:
+            return
+        with self._lock:
+            if self._roll() == day and self._used > 0:
+                self._used -= 1
 
 
 def same_key(expected, given):
@@ -303,16 +381,19 @@ class Demo:
     """One app instance: the service, the agent, the demo clock and the conversation registry."""
 
     def __init__(self, *, service, agent, clock, personas, demo_controls, max_turns, idle_s, wall, max_concurrent=8,
-                 console_users=()):
+                 console_users=(), daily=None, trust_forwarded_for=False, public_demo=False):
         self.service, self.agent, self.clock = service, agent, clock
         self.demo_controls, self.max_turns, self.idle_s, self.wall = demo_controls, max_turns, idle_s, wall
         self.console_users = {u.strip().lower() for u in console_users if u.strip()}
+        self.daily = daily or DailyCap(0)
+        self.trust_forwarded_for, self.public_demo = bool(trust_forwarded_for), bool(public_demo)
+        self.max_concurrent = max(1, max_concurrent)
         self.handles = {}
         self.labels = {}
         self._registry = threading.Lock()
         self._last_sweep = wall()
         self._opened = {}  # client -> wall times of the conversations it opened in the window
-        self.turn_slots = threading.BoundedSemaphore(max(1, max_concurrent))
+        self.turn_slots = threading.BoundedSemaphore(self.max_concurrent)
         self._doc_key = secrets.token_bytes(32)
         self.personas = personas
         self.persona_docs = {self.doc_digest(p.get("document_type"), p.get("document_number")) for p in personas}
@@ -566,8 +647,17 @@ def load_classifier():
         return None
 
 
-def client_of(request):
-    """Who opens conversations: the Databricks Apps user when the proxy says so, else the client address."""
+def client_of(request, trust_forwarded_for=False):
+    """Who opens conversations: the Databricks Apps user when the proxy says so, else the client address.
+
+    Behind a proxy that sets neither (the Hugging Face Space), every request comes from the proxy's address, so with
+    trust_forwarded_for (APP_TRUST_FORWARDED_FOR=1) the first X-Forwarded-For address comes first. The header is taken
+    as sent: it keeps honest visitors apart, it does not stop someone who forges it (APP_DAILY_MODEL_TURNS bounds the
+    cost)."""
+    if trust_forwarded_for:
+        first = request.headers.get("x-forwarded-for", "").split(",")[0].strip().lower()[:MAX_CLIENT_KEY]
+        if first:
+            return "fwd:" + first
     for name in CLIENT_HEADERS:
         value = request.headers.get(name, "").strip().lower()
         if value:
@@ -577,8 +667,10 @@ def client_of(request):
 
 def create_app(*, llm=None, config=None, repository=None, classifier=_DEFAULT, clock=None, personas_path=PERSONAS,
                demo_controls=None, max_turns=None, idle_minutes=None, wall=time.monotonic, max_concurrent=None,
-               console_users=None):
+               console_users=None, daily_turns=None, trust_forwarded_for=None, public_demo=None, frame_ancestors=None):
     """Build the app. Every argument has a default read from the environment; tests pass their own."""
+    headers = security_headers(os.environ.get("APP_FRAME_ANCESTORS", "") if frame_ancestors is None
+                               else frame_ancestors)
     cfg = service_config(config)
     if clock is None:
         start = cfg.clock if str(cfg.clock).strip().lower() != "system" else datetime.now().replace(microsecond=0)
@@ -607,7 +699,11 @@ def create_app(*, llm=None, config=None, repository=None, classifier=_DEFAULT, c
                 demo_controls=_env_flag("APP_DEMO_CONTROLS", "1") if demo_controls is None else demo_controls,
                 max_turns=max_turns or _env_int("APP_MAX_TURNS", 40),
                 idle_s=60 * (idle_minutes or _env_int("APP_IDLE_MINUTES", 60)), wall=wall,
-                max_concurrent=max_concurrent or _env_int("APP_MAX_CONCURRENT_TURNS", 8), console_users=console_users)
+                max_concurrent=max_concurrent or _env_int("APP_MAX_CONCURRENT_TURNS", 8), console_users=console_users,
+                daily=DailyCap(_env_int("APP_DAILY_MODEL_TURNS", 0) if daily_turns is None else daily_turns),
+                trust_forwarded_for=(_env_flag("APP_TRUST_FORWARDED_FOR", "0") if trust_forwarded_for is None
+                                     else trust_forwarded_for),
+                public_demo=_env_flag("APP_PUBLIC_DEMO", "0") if public_demo is None else public_demo)
 
     @asynccontextmanager
     async def lifespan(_app):
@@ -618,7 +714,7 @@ def create_app(*, llm=None, config=None, repository=None, classifier=_DEFAULT, c
     app.state.demo = demo
     app.add_middleware(BodyLimit, max_bytes=MAX_BODY_BYTES)
     app.add_middleware(JsonOnly)
-    app.add_middleware(SecurityHeaders)
+    app.add_middleware(SecurityHeaders, headers=headers)
     app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
     @app.get("/")
@@ -629,11 +725,12 @@ def create_app(*, llm=None, config=None, repository=None, classifier=_DEFAULT, c
     def app_config():
         return {"now": demo.now(), "model": getattr(llm, "endpoint", ""), "policy_version": service.pol["version"],
                 "env": service.config.env, "synthetic": True, "demo_controls": demo.demo_controls,
-                "console": demo.console_open(),
+                "console": demo.console_open(), "public_demo": demo.public_demo,
+                "daily_limit_reached": demo.daily.reached(),
                 "personas": demo.personas if demo.demo_controls else [],
                 "classifier": getattr(classifier, "model_version", None) if classifier else None,
                 "limits": {"max_turns": demo.max_turns, "max_text": MAX_TEXT, "max_offset_minutes": MAX_OFFSET_MIN,
-                           "idle_minutes": demo.idle_s // 60}}
+                           "idle_minutes": demo.idle_s // 60, "daily_model_turns": demo.daily.limit}}
 
     @app.get("/api/clock")
     def base_clock():
@@ -644,9 +741,10 @@ def create_app(*, llm=None, config=None, repository=None, classifier=_DEFAULT, c
                          x_conversation_key: str = Header("", max_length=64)):
         if body.previous_id:
             demo.end_owned(body.previous_id, x_conversation_key)
-        handle, conv = demo.open(body.language if body.language in ("es", "pt") else "es", client_of(request))
+        handle, conv = demo.open(body.language if body.language in ("es", "pt") else "es",
+                                 client_of(request, demo.trust_forwarded_for))
         return {"conversation_id": conv.id, "conversation_key": handle.key, "label": conv.label,
-                "language": conv.language, "now": demo.now(conv.id)}
+                "language": conv.language, "now": demo.now(conv.id), "daily_limit_reached": demo.daily.reached()}
 
     @app.post("/api/conversations/{conv_id}/messages")
     def customer_message(conv_id: str, body: Message, x_conversation_key: str = Header("", max_length=64)):
@@ -657,7 +755,9 @@ def create_app(*, llm=None, config=None, repository=None, classifier=_DEFAULT, c
         with demo.turn(handle), clock.bound(conv.id):
             if handle.customer_turns >= demo.max_turns:
                 raise HTTPException(429, {"code": "turn_limit", "max_turns": demo.max_turns})
+            demo.daily.check()  # before waiting for a model slot
             with demo.model_slot():
+                demo.daily.take()
                 handle.customer_turns += 1
                 try:
                     out = agent.customer_turn(conv, text)
@@ -674,6 +774,7 @@ def create_app(*, llm=None, config=None, repository=None, classifier=_DEFAULT, c
         doc = demo.doc_digest(body.document_type, body.document_number)
         if handle.signed_doc and doc != handle.signed_doc:  # another customer in the same chat: new conversation
             return {"ok": False, "error": "OTHER_CUSTOMER"}
+        demo.daily.check()  # no code is sent when the sign-in could not go on to a model turn
         with demo.turn(handle, wait_s=5), clock.bound(conv.id):
             res = service.call_tool("start_authentication", {"document_type": body.document_type,
                                                              "document_number": body.document_number},
@@ -690,12 +791,15 @@ def create_app(*, llm=None, config=None, repository=None, classifier=_DEFAULT, c
     @app.post("/api/conversations/{conv_id}/auth/verify")
     def auth_verify(conv_id: str, body: AuthVerify, x_conversation_key: str = Header("", max_length=64)):
         handle, conv = demo.get(conv_id, x_conversation_key)
+        demo.daily.check()
         with demo.turn(handle, wait_s=5), clock.bound(conv.id), demo.model_slot():  # a valid code starts a model turn
             if not conv.challenge_id:
                 raise HTTPException(400, {"code": "no_challenge"})
+            day = demo.daily.take()
             res = service.call_tool("verify_otp", {"challenge_id": conv.challenge_id, "code": body.code.strip()},
                                     None, runtime_ctx(conv))
             if not res.ok:
+                demo.daily.give_back(day)  # a wrong or expired code never reached the model
                 details = res.error.get("details") or {}
                 return {"ok": False, "error": res.error["code"], "reason": details.get("reason"),
                         "attempts_remaining": details.get("attempts_remaining"),

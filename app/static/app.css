@@ -148,6 +148,8 @@ button { cursor: pointer; }
 .session-meter span { display: block; height: 100%; background: #59D19A; border-radius: 2px; transform-origin: left center; transition: transform .5s cubic-bezier(.16, 1, .3, 1); }
 
 .rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: 14px; }
+.public-note { margin: 0; display: flex; align-items: flex-start; gap: 9px; padding: 8px 10px; border: 1px solid var(--rail-line); border-radius: 8px; font-size: 12.5px; line-height: 1.4; color: var(--rail-ink); }
+.public-note::before { content: ""; flex: none; width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: var(--led); }
 .sms { background: var(--rail-ink); color: var(--ink); border-radius: 12px; padding: 11px 12px; display: grid; grid-template-columns: auto 1fr; gap: 10px; box-shadow: 0 10px 24px rgba(0, 0, 0, .22); }
 .sms .ic { color: var(--rail); margin-top: 2px; }
 .sms p { margin: 0; }

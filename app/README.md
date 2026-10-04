@@ -69,6 +69,7 @@ Configuration (environment):
 | `APP_MAX_CONCURRENT_TURNS` | `8` | Model turns running at the same time across the app |
 | `APP_CONSOLE_USERS` | empty | Comma-separated e-mails that may open the specialist console (matched against the `X-Forwarded-Email` header the Databricks Apps proxy sets). Without it the console exists only while `APP_DEMO_CONTROLS=1` |
 | `APP_PRICE_IN_PER_MTOK`, `APP_PRICE_OUT_PER_MTOK` | `0` | Optional price assumptions for the per-turn cost estimate |
+| `APP_DAILY_MODEL_TURNS`, `APP_TRUST_FORWARDED_FOR`, `APP_PUBLIC_DEMO`, `APP_FRAME_ANCESTORS` | off | Public demo limits, see [below](#public-demo-on-hugging-face-spaces) |
 
 Tests (no network, fake model, fixture snapshot): `python -m pytest tests/app -q`.
 
@@ -98,6 +99,60 @@ databricks apps logs expediente-demo --profile factored
 What the folder holds ([`bundle.py`](bundle.py)): the app code and static files, the runtime modules of `src/` (bank tools, policy, intent classifier, `gold_lib` and the Gold table spec), `models/intent_classifier/`, `data/bank_tools/snapshot_panel.sqlite`, `data/bank_tools/demo_personas.json`, `app.yaml` and `requirements.txt` at the root. No tests, evaluation data, transcripts or audit logs. `data/` and `models/` are uploaded to the workspace with the app and never committed.
 
 `app.yaml` runs one uvicorn worker on `DATABRICKS_APP_PORT` and sets `BANK_TOOLS_ENV=demo`, `BANK_TOOLS_REPOSITORY=local`, the bundled snapshot, `APP_STORE=/tmp/app_store.sqlite`, `BANK_TOOLS_AUDIT_DIR=/tmp/expediente_audit`, `APP_DEMO_CONTROLS=1` and the endpoint. Cases, tickets and audit records live in `/tmp` and end when the app restarts or redeploys; the signing keys are random per process, so a restart also ends every session. Opening the app takes a Databricks login: the owner lets others in with the app's "Can use" permission (Compute → Apps → `expediente-demo` → Permissions).
+
+## Public demo on Hugging Face Spaces
+
+A public copy for people without a Databricks login: a Hugging Face Space (Docker SDK) runs the same app with the limits below and calls the same serving endpoint, `databricks-gpt-oss-120b`. Everything a public Space holds can be read by anyone, so the Space repo gets code only, and the data and the model go to a private dataset repo:
+
+| Where | What | Who can read it |
+|---|---|---|
+| Space repo (public) | [`space/Dockerfile`](space/Dockerfile), the Space card [`space/README.md`](space/README.md), `requirements.txt` and [`requirements-space.txt`](requirements-space.txt), the app code and static files, the runtime modules of `src/` (the code files of `bundle.py`) and [`fetch_assets.py`](fetch_assets.py) | Anyone |
+| Dataset repo (private) | `data/bank_tools/snapshot_panel.sqlite`, `data/bank_tools/demo_personas.json`, `models/intent_classifier/model.joblib`, `models/intent_classifier/model_card.json` | The team, and the Space through `HF_TOKEN` |
+| Space secrets | The tokens and credentials below | The running Space only (as environment variables) |
+
+Each time the container starts, `python -m app.fetch_assets` downloads the files that are missing from the dataset repo to the paths the server reads, then uvicorn serves the app on port 7860 with one worker. A wrong token, repo or file stops the start with a one-line reason in the Space logs; the token is never printed. It also warns when no model credentials are set. On a machine that already has the files, it does nothing.
+
+Secrets and variables to set in the Space settings (Settings → Variables and secrets):
+
+| Name | Value |
+|---|---|
+| `HF_DATA_REPO` | `owner/name` of the private dataset repo (a variable is enough) |
+| `HF_TOKEN` | A fine-grained token that can only read that dataset repo |
+| `HF_DATA_REVISION` | Optional: a branch, tag or commit of the dataset repo (default `main`) |
+| `DATABRICKS_HOST` | The workspace URL |
+| `DATABRICKS_CLIENT_ID`, `DATABRICKS_CLIENT_SECRET` | OAuth secret of a service principal whose only permission is `CAN_QUERY` on `databricks-gpt-oss-120b` (`DATABRICKS_TOKEN` also works, but a personal token carries all of its owner's rights) |
+
+The Dockerfile sets the same service settings as `app.yaml` (`BANK_TOOLS_ENV=demo`, the local repository, cases, tickets and audit records in `/tmp`, demo controls on) plus the public demo limits. All of them are off by default, so the Databricks App and the tests behave as before:
+
+| Variable | In the Space | Default | Effect |
+|---|---|---|---|
+| `APP_DAILY_MODEL_TURNS` | `400` | `0` (off) | Customer messages and sign-ins that reach the model, per UTC day, across the whole app. When they are used up, sending a message, asking for a code and verifying one answer HTTP 429 `daily_limit`, and the page shows a note to the customer (ES/PT) and one to the presenter (EN/ES): "The public demo reached today's limit; it resets at 00:00 UTC." A wrong code does not count. The count is in memory: a restart starts the day again |
+| `APP_MAX_CONCURRENT_TURNS` | `3` | `8` | Model turns running at the same time |
+| `APP_TRUST_FORWARDED_FOR` | `1` | `0` | Behind the Hugging Face proxy every request comes from the proxy's address, so the limit of 30 new conversations per client every 10 minutes keys on the first `X-Forwarded-For` address (else as before). The header is taken as sent: it keeps visitors apart, it does not stop someone who forges it; the daily cap is what bounds the cost |
+| `APP_PUBLIC_DEMO` | `1` | `0` | A line in the sidebar, in the interface language: "Public demo on synthetic data · limited daily usage" |
+| `APP_FRAME_ANCESTORS` | `https://huggingface.co` | empty | The Space page shows the app in a frame from huggingface.co; only the listed https origins may frame it. Empty keeps `frame-ancestors 'none'` |
+
+The specialist console stays open in the Space (it is part of what the demo shows): anyone with the link can read the latest 100 tickets and cases, with customer ids masked, on synthetic data.
+
+```bash
+# 1. Build both folders, outside the repository, from a checkout that has data/bank_tools/ and models/intent_classifier/
+python -m app.space_bundle --out ../expediente-space
+#    ../expediente-space/space  the public Space repo (code only; the build fails if a data or model file or a token would land here)
+#    ../expediente-space/data   the files for the private dataset repo
+
+# 2. Log in once with a write token (huggingface-cli no longer works; hf replaces it)
+hf auth login
+
+# 3. The private dataset repo
+hf repos create <owner>/expediente-data --type dataset --private
+hf upload <owner>/expediente-data ../expediente-space/data . --repo-type dataset
+
+# 4. The Space: create it, set the secrets above in its settings, then upload the code (every upload rebuilds it)
+hf repos create <owner>/expediente --type space --space-sdk docker --public
+hf upload <owner>/expediente ../expediente-space/space . --repo-type space
+```
+
+The link to share is `https://<owner>-expediente.hf.space` (the app alone) or `https://huggingface.co/spaces/<owner>/expediente` (the Space page). Restart the Space (Settings → Restart) before a judging session, for the same reason as the Databricks App: the demo clock. A Space on free hardware goes to sleep after a while without visits; the next visit wakes it, and the start downloads the data again.
 
 ## Model choice (smoke tests, 2026-10-02)
 

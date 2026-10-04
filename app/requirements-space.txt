@@ -1,0 +1,4 @@
+# Public demo on a Hugging Face Space: the Databricks App's requirements plus the client that downloads the data and
+# the model from the private dataset repo at start (app/fetch_assets.py). See app/space/Dockerfile.
+-r requirements.txt
+huggingface_hub==1.19.*

@@ -3,6 +3,7 @@ No network: the model is a fake and the clock's wall time is a counter the tests
 
     python -m pytest tests/app -q
 """
+import datetime
 import json
 import re
 import sys
@@ -572,3 +573,118 @@ def test_the_badge_reads_ticket_ids_only(make):
     console = env.client.get("/api/console").json()
     assert count == {"ticket_ids": [t["ticket_id"] for t in console["tickets"]]} and len(count["ticket_ids"]) == 1
     assert set(console["tickets"][0]) == set(srv.CONSOLE_TICKET_FIELDS)
+
+
+# -- public demo (Hugging Face Space) ------------------------------------------------------------------------------------
+PUBLIC_VARS = ("APP_DAILY_MODEL_TURNS", "APP_TRUST_FORWARDED_FOR", "APP_PUBLIC_DEMO", "APP_FRAME_ANCESTORS",
+               "APP_MAX_CONCURRENT_TURNS")
+DAY = datetime.date(2026, 10, 4)
+
+
+def test_public_demo_settings_are_off_by_default(make, monkeypatch):
+    for var in PUBLIC_VARS:
+        monkeypatch.delenv(var, raising=False)
+    env = make()
+    cfg = env.client.get("/api/config").json()
+    assert cfg["public_demo"] is False and cfg["daily_limit_reached"] is False
+    assert cfg["limits"]["daily_model_turns"] == 0
+    assert env.demo.daily.limit == 0 and env.demo.trust_forwarded_for is False and env.demo.max_concurrent == 8
+    page = env.client.get("/")
+    assert "frame-ancestors 'none'" in page.headers["content-security-policy"]
+    assert page.headers["x-frame-options"] == "DENY"
+    for _ in range(3):
+        assert say(env, *new_conv(env)[:2], "hola").status_code == 200  # no daily cap
+
+
+def test_public_demo_settings_come_from_the_environment(make, monkeypatch):
+    for var, value in (("APP_DAILY_MODEL_TURNS", "400"), ("APP_TRUST_FORWARDED_FOR", "1"), ("APP_PUBLIC_DEMO", "1"),
+                       ("APP_FRAME_ANCESTORS", "https://huggingface.co"), ("APP_MAX_CONCURRENT_TURNS", "3")):
+        monkeypatch.setenv(var, value)
+    env = make()
+    cfg = env.client.get("/api/config").json()
+    assert cfg["public_demo"] is True and cfg["limits"]["daily_model_turns"] == 400
+    assert env.demo.trust_forwarded_for is True and env.demo.max_concurrent == 3
+    page = env.client.get("/")
+    assert "frame-ancestors https://huggingface.co" in page.headers["content-security-policy"]
+    assert "x-frame-options" not in page.headers and page.headers["x-content-type-options"] == "nosniff"
+
+
+def test_frame_ancestors_takes_https_origins_only(make):
+    for bad in ("http://huggingface.co", "https://huggingface.co; script-src *", "'self'", "*"):
+        with pytest.raises(ValueError):
+            make(frame_ancestors=bad)
+    env = make(frame_ancestors="https://huggingface.co https://*.hf.space")
+    assert "frame-ancestors https://huggingface.co https://*.hf.space" in \
+        env.client.get("/").headers["content-security-policy"]
+
+
+def test_daily_cap_counts_customer_and_sign_in_turns_and_resets_at_utc_midnight(make):
+    env = make(daily_turns=2)
+    env.demo.daily.today = lambda: DAY
+    cid, headers, opened = new_conv(env)
+    assert opened["daily_limit_reached"] is False
+    sign_in(env, cid, headers)                                      # 1: the sign-in turn
+    assert say(env, cid, headers, "hola").status_code == 200        # 2
+    calls = env.llm.calls
+    res = say(env, cid, headers, "hola otra vez")
+    detail = res.json()["detail"]
+    assert res.status_code == 429 and detail == {"code": "daily_limit", "limit": 2, "resets_at": "2026-10-05T00:00:00Z"}
+    assert env.llm.calls == calls  # the refused turn never reached the model
+    other, other_headers, opened = new_conv(env)  # the cap is global: every conversation sees it
+    assert opened["daily_limit_reached"] is True and env.client.get("/api/config").json()["daily_limit_reached"]
+    res = env.client.post(f"/api/conversations/{other}/auth/start", headers=other_headers,
+                          json={"document_type": C1_DOC[0], "document_number": C1_DOC[1]})
+    assert res.status_code == 429 and res.json()["detail"]["code"] == "daily_limit"
+    env.demo.daily.today = lambda: DAY + datetime.timedelta(days=1)  # 00:00 UTC
+    out = say(env, cid, headers, "hola otra vez")
+    assert out.status_code == 200 and out.json()["turns_left"] == env.demo.max_turns - 2  # the refused one not counted
+
+
+def test_a_sign_in_with_a_wrong_code_does_not_use_the_daily_cap(make):
+    env = make(daily_turns=1)
+    env.demo.daily.today = lambda: DAY
+    cid, headers, _ = new_conv(env)
+    assert start_sign_in(env, cid, headers, C1_DOC)["ok"]
+    code = env.client.get(f"/api/conversations/{cid}/phone", headers=headers).json()["code"]
+    wrong = str((int(code) + 1) % 10 ** 6).zfill(6)
+    out = env.client.post(f"/api/conversations/{cid}/auth/verify", headers=headers, json={"code": wrong}).json()
+    assert out["ok"] is False and out["reason"] == "invalid_code"
+    env.llm.script = [("text", "Hola, ya te identifiqué.")]
+    out = env.client.post(f"/api/conversations/{cid}/auth/verify", headers=headers, json={"code": code}).json()
+    assert out["ok"] and out["signed_in"]  # the only turn of the day
+    res = say(env, cid, headers, "hola")
+    assert res.status_code == 429 and res.json()["detail"]["code"] == "daily_limit"
+
+
+def test_daily_cap_takes_and_gives_back_on_the_same_day_only():
+    day = [DAY]
+    cap = srv.DailyCap(2, today=lambda: day[0])
+    first = cap.take()
+    cap.take()
+    assert cap.reached()
+    with pytest.raises(srv.HTTPException):
+        cap.take()
+    cap.give_back(first)
+    assert not cap.reached()
+    cap.take()
+    day[0] = DAY + datetime.timedelta(days=1)
+    cap.give_back(first)  # yesterday's turn: today's count stays at 0
+    assert cap.take() == day[0] and not cap.reached()
+    off = srv.DailyCap(0)
+    assert off.take() is None and not off.reached()
+
+
+def test_conversation_limit_keys_on_the_first_forwarded_for_address_when_trusted(make, monkeypatch):
+    monkeypatch.setattr(srv, "NEW_CONVERSATIONS", (2, 600))
+    first = {"X-Forwarded-For": "203.0.113.7, 10.0.0.2"}
+    second = {"X-Forwarded-For": "198.51.100.9, 10.0.0.2"}
+
+    def opens(env, headers):
+        return env.client.post("/api/conversations", headers=headers, json={"language": "es"}).status_code
+
+    env = make(trust_forwarded_for=True)
+    assert [opens(env, first) for _ in range(3)] == [200, 200, 429]
+    assert [opens(env, second) for _ in range(3)] == [200, 200, 429]  # another visitor behind the same proxy
+    assert [opens(env, {}) for _ in range(3)] == [200, 200, 429]      # no header: the client address, as before
+    env = make()  # not trusted (the default): the header is ignored and every request is the proxy's address
+    assert [opens(env, first), opens(env, second), opens(env, {})] == [200, 200, 429]
