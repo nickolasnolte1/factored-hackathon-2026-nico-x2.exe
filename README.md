@@ -4,6 +4,8 @@ An AI-first customer service system for a LATAM retail bank (MX / CO / AR), buil
 
 **Live demo:** https://nicocon123-expediente.hf.space (public, synthetic data, limited daily usage; the same app also runs as the Databricks App `expediente-demo` in the team workspace). Try a test customer from the sidebar: the simulated phone shows the one-time code.
 
+**Video pitch:** https://drive.google.com/file/d/1Y9NDcfUnlr13FtUGLLstPGJnolGDKZnG/view?usp=sharing
+
 > Status: 🚧 in progress (challenge window: Sep 25 – Oct 5, 2026). Held-out results: the agent completes 137 of 140 test scenarios (97.9%, 95% interval 95.0–100.0) and the intent classifier beats the keyword baseline on all three held-out sets; see [docs/06_evaluation.md](docs/06_evaluation.md).
 
 ## Repository layout
