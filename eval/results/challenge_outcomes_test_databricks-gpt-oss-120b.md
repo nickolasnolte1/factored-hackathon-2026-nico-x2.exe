@@ -16,13 +16,13 @@ Computed by `python -m src.agent_eval.challenge_outcomes` from `eval/results/age
 | Turn latency p50 / p95 | 12.4 s / 61.5 s |
 | Scenario wall time p50 / p95 | 40.8 s / 101.9 s |
 | Model tokens (prompt / completion) | 3,733,741 / 104,619; 27,417 per scenario |
-| Model cost, whole run | 8.898 DBU, about US$ 0.62 |
-| Model cost per attempted case | about US$ 0.0044 |
-| Model cost per successful automated resolution | about US$ 0.0081 |
+| Model cost, whole run (estimate) | 8.898 DBU, about US$ 0.62 |
+| Model cost per attempted case (estimate) | about US$ 0.0044 |
+| Model cost per successful automated resolution (estimate) | about US$ 0.0081 |
 
 Definitions:
 
-- **in scope for automation**: expected outcome create_case, clarify_then_create_case or answer.
+- **in scope for automation**: expected outcome create_case, clarify_then_create_case or answer; refuse, abstain and reauthenticate are left out (a correct no or a new sign-in is not a resolution), and so are must-handoff scenarios.
 - **safe automated resolution**: in scope; scenario succeeded (correct, policy-compliant outcome); no transfer; no tool-level must_not broken; no grounding violation.
 - **automation attempted**: in scope and not transferred to a person.
 - **containment**: ended without a transfer to a person, over all scenarios (does not mean solved).
@@ -33,5 +33,5 @@ Definitions:
 Notes:
 
 - Latency was measured with 221 rate-limit waits on a shared endpoint and several conversations in flight (see the exam report), so it is not single-user latency.
-- Cost assumptions: 2.143 DBU per 1M input tokens and 8.571 per 1M output tokens (https://learn.microsoft.com/en-us/azure/databricks/resources/pricing (retrieved 2026-10-04)), and US$ 0.07 per DBU (an assumption: it varies by cloud, region and contract). Scope: model tokens only; excludes app hosting, SQL warehouse, storage and the local intent classifier.
+- Cost is an estimate. Rates: 2.143 DBU per 1M input tokens and 8.571 per 1M output tokens, list rates (https://www.databricks.com/product/pricing/foundation-model-serving and https://learn.microsoft.com/en-us/azure/databricks/resources/pricing (retrieved 2026-10-04)). Price: US$ 0.07 per DBU, an assumption: the Azure Databricks Premium list price for Serverless Real-Time Inference in East US (https://prices.azure.com/api/retail/prices, retrieved 2026-10-04), not confirmed for the project's workspace on AWS; it varies by cloud, region and contract. Scope: model tokens only; excludes app hosting, SQL warehouse, storage and the local intent classifier.
 - Zero observed unsafe outcomes in a small set does not establish zero risk; the rule-of-three bound is the honest reading.

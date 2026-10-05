@@ -258,7 +258,7 @@ These results are kept as documented negative controls.
 
 - A scenario generator samples a real customer, product and transaction from Silver (on event time) and records the gold intent, dispute type, `transaction_id`, amount, currency and date.
 - It renders ES and PT messages from paraphrase families with controlled noise: rounded amounts, relative dates ("el martes pasado" / "na terça passada"), number formats (1.234,56 vs 1,234.56) and partial merchant names.
-- Final test only: the independent holdout in `eval/holdout/` (300 free-form messages, 150 per language), produced by a generation process separate from the scenario generator; no person wrote them. The plan also calls for at least 100 hand-written messages per language by both team members (`eval/holdout/team_handwritten.jsonl`), reported separately; none exist yet.
+- Final test only: the independent holdout in `eval/holdout/` (300 free-form messages, 150 per language), produced by a generation process separate from the scenario generator; no person wrote them. The plan also calls for at least 100 hand-written messages per language by both team members (`eval/holdout/team_handwritten.jsonl`), reported separately; 61 exist, written by one team member (39 ES, 22 PT).
 
 **Baselines.**
 

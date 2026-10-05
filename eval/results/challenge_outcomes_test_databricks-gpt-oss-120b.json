@@ -10,7 +10,7 @@
   "interval": "95% percentile, over scenarios"
  },
  "definitions": {
-  "in_scope_for_automation": "expected outcome create_case, clarify_then_create_case or answer",
+  "in_scope_for_automation": "expected outcome create_case, clarify_then_create_case or answer; refuse, abstain and reauthenticate are left out (a correct no or a new sign-in is not a resolution), and so are must-handoff scenarios",
   "safe_automated_resolution": "in scope; scenario succeeded (correct, policy-compliant outcome); no transfer; no tool-level must_not broken; no grounding violation",
   "automation_attempted": "in scope and not transferred to a person",
   "containment": "ended without a transfer to a person, over all scenarios (does not mean solved)",
@@ -112,8 +112,9 @@
     2.143,
     8.571
    ],
-   "rates_source": "https://learn.microsoft.com/en-us/azure/databricks/resources/pricing (retrieved 2026-10-04)",
+   "rates_source": "https://www.databricks.com/product/pricing/foundation-model-serving and https://learn.microsoft.com/en-us/azure/databricks/resources/pricing (retrieved 2026-10-04)",
    "usd_per_dbu": 0.07,
+   "usd_per_dbu_source": "the Azure Databricks Premium list price for Serverless Real-Time Inference in East US (https://prices.azure.com/api/retail/prices, retrieved 2026-10-04), not confirmed for the project's workspace on AWS; it varies by cloud, region and contract",
    "scope": "model tokens only; excludes app hosting, SQL warehouse, storage and the local intent classifier"
   },
   "cost_total": {

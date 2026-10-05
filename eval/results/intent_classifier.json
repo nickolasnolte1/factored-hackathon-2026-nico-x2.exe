@@ -32,7 +32,8 @@
     "dispute_detected": "the same rows; share predicted as either dispute class",
     "out_of_scope_false_accept": "rows whose intent is out_of_scope; share predicted as a class that is not acceptable for the row (abstentions excluded from the numerator)",
     "calibration": "ECE on the top probability (correct = top intent acceptable), multi-class Brier against the effective label, log-loss of the probability mass on the acceptable intents",
-    "interval": "95% percentile bootstrap over rows; paired across systems within a slice"
+    "interval": "95% percentile bootstrap over rows; paired across systems within a slice",
+    "variants": "sets test, independent, team: keyword router and bilingual models on the rows of each language variant, with the accuracy gap of the variant minus the other rows of the set (resampled separately); added after every other number in this report was known, from the same predictions; fixed in advance: fewer than 20 rows in the variant or in the rest is \"sample too small to conclude\" and gets no gap"
   },
   "settings": {
     "boot": 2000,
@@ -4827,6 +4828,615 @@
           ],
           "target_abs_gap": 0.05,
           "within_target": true
+        }
+      },
+      "variants": {
+        "es-MX": {
+          "n": 152,
+          "n_rest": 1048,
+          "families": 8,
+          "gold_classes": 5,
+          "macro_f1_interpretable": true,
+          "systems": {
+            "keyword": {
+              "accuracy": {
+                "n": 152,
+                "count": 108,
+                "value": 0.710526,
+                "ci": [
+                  0.638158,
+                  0.782895
+                ]
+              },
+              "macro_f1": {
+                "value": 0.722846,
+                "ci": [
+                  0.647639,
+                  0.786955
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 18,
+                "dispute_incorrect_charge_or_fee": 23,
+                "account_payment_inquiry": 54,
+                "card_lost_or_block": 34,
+                "other_complaint": 7,
+                "out_of_scope": 16
+              },
+              "accuracy_rest": {
+                "n": 1048,
+                "count": 844,
+                "value": 0.805344
+              },
+              "accuracy_gap_vs_rest": {
+                "value": -0.094817,
+                "ci": [
+                  -0.170154,
+                  -0.016719
+                ]
+              }
+            },
+            "model_v1": {
+              "accuracy": {
+                "n": 152,
+                "count": 132,
+                "value": 0.868421,
+                "ci": [
+                  0.815789,
+                  0.914474
+                ]
+              },
+              "macro_f1": {
+                "value": 0.830451,
+                "ci": [
+                  0.755999,
+                  0.890575
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 14,
+                "dispute_incorrect_charge_or_fee": 23,
+                "account_payment_inquiry": 26,
+                "card_lost_or_block": 59,
+                "other_complaint": 14,
+                "out_of_scope": 16
+              },
+              "accuracy_rest": {
+                "n": 1048,
+                "count": 776,
+                "value": 0.740458
+              },
+              "accuracy_gap_vs_rest": {
+                "value": 0.127963,
+                "ci": [
+                  0.070357,
+                  0.183661
+                ]
+              }
+            },
+            "model_v2": {
+              "accuracy": {
+                "n": 152,
+                "count": 116,
+                "value": 0.763158,
+                "ci": [
+                  0.697368,
+                  0.828947
+                ]
+              },
+              "macro_f1": {
+                "value": 0.754738,
+                "ci": [
+                  0.679689,
+                  0.818198
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 18,
+                "dispute_incorrect_charge_or_fee": 20,
+                "account_payment_inquiry": 48,
+                "card_lost_or_block": 44,
+                "other_complaint": 7,
+                "out_of_scope": 15
+              },
+              "accuracy_rest": {
+                "n": 1048,
+                "count": 865,
+                "value": 0.825382
+              },
+              "accuracy_gap_vs_rest": {
+                "value": -0.062224,
+                "ci": [
+                  -0.132047,
+                  0.006849
+                ]
+              }
+            }
+          },
+          "reading": "accuracy gap vs rest, interval excludes zero: keyword, model_v1"
+        },
+        "es-CO": {
+          "n": 318,
+          "n_rest": 882,
+          "families": 12,
+          "gold_classes": 5,
+          "macro_f1_interpretable": true,
+          "systems": {
+            "keyword": {
+              "accuracy": {
+                "n": 318,
+                "count": 264,
+                "value": 0.830189,
+                "ci": [
+                  0.789308,
+                  0.871069
+                ]
+              },
+              "macro_f1": {
+                "value": 0.791083,
+                "ci": [
+                  0.741387,
+                  0.838258
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 117,
+                "dispute_incorrect_charge_or_fee": 21,
+                "account_payment_inquiry": 88,
+                "other_complaint": 60,
+                "out_of_scope": 32
+              },
+              "accuracy_rest": {
+                "n": 882,
+                "count": 688,
+                "value": 0.780045
+              },
+              "accuracy_gap_vs_rest": {
+                "value": 0.050143,
+                "ci": [
+                  -0.001052,
+                  0.09999
+                ]
+              }
+            },
+            "model_v1": {
+              "accuracy": {
+                "n": 318,
+                "count": 233,
+                "value": 0.732704,
+                "ci": [
+                  0.685535,
+                  0.779874
+                ]
+              },
+              "macro_f1": {
+                "value": 0.721246,
+                "ci": [
+                  0.668735,
+                  0.76968
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 103,
+                "dispute_incorrect_charge_or_fee": 43,
+                "account_payment_inquiry": 65,
+                "card_lost_or_block": 12,
+                "other_complaint": 64,
+                "out_of_scope": 31
+              },
+              "accuracy_rest": {
+                "n": 882,
+                "count": 675,
+                "value": 0.765306
+              },
+              "accuracy_gap_vs_rest": {
+                "value": -0.032602,
+                "ci": [
+                  -0.088955,
+                  0.02101
+                ]
+              }
+            },
+            "model_v2": {
+              "accuracy": {
+                "n": 318,
+                "count": 263,
+                "value": 0.827044,
+                "ci": [
+                  0.786164,
+                  0.867925
+                ]
+              },
+              "macro_f1": {
+                "value": 0.784227,
+                "ci": [
+                  0.73295,
+                  0.832632
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 117,
+                "dispute_incorrect_charge_or_fee": 19,
+                "account_payment_inquiry": 91,
+                "other_complaint": 60,
+                "out_of_scope": 31
+              },
+              "accuracy_rest": {
+                "n": 882,
+                "count": 718,
+                "value": 0.814059
+              },
+              "accuracy_gap_vs_rest": {
+                "value": 0.012985,
+                "ci": [
+                  -0.034961,
+                  0.06129
+                ]
+              }
+            }
+          },
+          "reading": "no accuracy gap shown: every interval includes zero"
+        },
+        "es-AR": {
+          "n": 130,
+          "n_rest": 1070,
+          "families": 9,
+          "gold_classes": 4,
+          "macro_f1_interpretable": true,
+          "systems": {
+            "keyword": {
+              "accuracy": {
+                "n": 130,
+                "count": 103,
+                "value": 0.792308,
+                "ci": [
+                  0.722885,
+                  0.861538
+                ]
+              },
+              "macro_f1": {
+                "value": 0.730393,
+                "ci": [
+                  0.639385,
+                  0.806657
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 12,
+                "dispute_incorrect_charge_or_fee": 15,
+                "account_payment_inquiry": 40,
+                "other_complaint": 7,
+                "out_of_scope": 56
+              },
+              "accuracy_rest": {
+                "n": 1070,
+                "count": 849,
+                "value": 0.793458
+              },
+              "accuracy_gap_vs_rest": {
+                "value": -0.00115,
+                "ci": [
+                  -0.074348,
+                  0.067867
+                ]
+              }
+            },
+            "model_v1": {
+              "accuracy": {
+                "n": 130,
+                "count": 103,
+                "value": 0.792308,
+                "ci": [
+                  0.715385,
+                  0.861538
+                ]
+              },
+              "macro_f1": {
+                "value": 0.744664,
+                "ci": [
+                  0.648632,
+                  0.822851
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 14,
+                "dispute_incorrect_charge_or_fee": 18,
+                "account_payment_inquiry": 32,
+                "card_lost_or_block": 2,
+                "other_complaint": 9,
+                "out_of_scope": 55
+              },
+              "accuracy_rest": {
+                "n": 1070,
+                "count": 805,
+                "value": 0.752336
+              },
+              "accuracy_gap_vs_rest": {
+                "value": 0.039971,
+                "ci": [
+                  -0.038968,
+                  0.117414
+                ]
+              }
+            },
+            "model_v2": {
+              "accuracy": {
+                "n": 130,
+                "count": 107,
+                "value": 0.823077,
+                "ci": [
+                  0.753846,
+                  0.884615
+                ]
+              },
+              "macro_f1": {
+                "value": 0.74332,
+                "ci": [
+                  0.648857,
+                  0.820394
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 12,
+                "dispute_incorrect_charge_or_fee": 14,
+                "account_payment_inquiry": 36,
+                "other_complaint": 7,
+                "out_of_scope": 61
+              },
+              "accuracy_rest": {
+                "n": 1070,
+                "count": 874,
+                "value": 0.816822
+              },
+              "accuracy_gap_vs_rest": {
+                "value": 0.006254,
+                "ci": [
+                  -0.065996,
+                  0.070598
+                ]
+              }
+            }
+          },
+          "reading": "no accuracy gap shown: every interval includes zero"
+        },
+        "pt-BR": {
+          "n": 561,
+          "n_rest": 639,
+          "families": 14,
+          "gold_classes": 6,
+          "macro_f1_interpretable": true,
+          "systems": {
+            "keyword": {
+              "accuracy": {
+                "n": 561,
+                "count": 461,
+                "value": 0.821747,
+                "ci": [
+                  0.789661,
+                  0.85205
+                ]
+              },
+              "macro_f1": {
+                "value": 0.833665,
+                "ci": [
+                  0.803829,
+                  0.860564
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 73,
+                "dispute_incorrect_charge_or_fee": 109,
+                "account_payment_inquiry": 147,
+                "card_lost_or_block": 54,
+                "other_complaint": 58,
+                "out_of_scope": 120
+              },
+              "accuracy_rest": {
+                "n": 639,
+                "count": 491,
+                "value": 0.768388
+              },
+              "accuracy_gap_vs_rest": {
+                "value": 0.053359,
+                "ci": [
+                  0.005972,
+                  0.099054
+                ]
+              }
+            },
+            "model_v1": {
+              "accuracy": {
+                "n": 561,
+                "count": 412,
+                "value": 0.734403,
+                "ci": [
+                  0.698752,
+                  0.768271
+                ]
+              },
+              "macro_f1": {
+                "value": 0.712702,
+                "ci": [
+                  0.672595,
+                  0.747904
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 134,
+                "dispute_incorrect_charge_or_fee": 123,
+                "account_payment_inquiry": 98,
+                "card_lost_or_block": 73,
+                "other_complaint": 33,
+                "out_of_scope": 100
+              },
+              "accuracy_rest": {
+                "n": 639,
+                "count": 496,
+                "value": 0.776213
+              },
+              "accuracy_gap_vs_rest": {
+                "value": -0.04181,
+                "ci": [
+                  -0.089328,
+                  0.007749
+                ]
+              }
+            },
+            "model_v2": {
+              "accuracy": {
+                "n": 561,
+                "count": 479,
+                "value": 0.853832,
+                "ci": [
+                  0.825312,
+                  0.882353
+                ]
+              },
+              "macro_f1": {
+                "value": 0.860758,
+                "ci": [
+                  0.832055,
+                  0.888034
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 89,
+                "dispute_incorrect_charge_or_fee": 114,
+                "account_payment_inquiry": 127,
+                "card_lost_or_block": 54,
+                "other_complaint": 58,
+                "out_of_scope": 119
+              },
+              "accuracy_rest": {
+                "n": 639,
+                "count": 502,
+                "value": 0.785603
+              },
+              "accuracy_gap_vs_rest": {
+                "value": 0.06823,
+                "ci": [
+                  0.024449,
+                  0.112449
+                ]
+              }
+            }
+          },
+          "reading": "accuracy gap vs rest, interval excludes zero: keyword, model_v2"
+        },
+        "mixed": {
+          "n": 39,
+          "n_rest": 1161,
+          "families": 1,
+          "gold_classes": 1,
+          "macro_f1_interpretable": true,
+          "systems": {
+            "keyword": {
+              "accuracy": {
+                "n": 39,
+                "count": 16,
+                "value": 0.410256,
+                "ci": [
+                  0.25641,
+                  0.564103
+                ]
+              },
+              "macro_f1": {
+                "value": 0.581818,
+                "ci": [
+                  0.408163,
+                  0.721311
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 16,
+                "account_payment_inquiry": 22,
+                "out_of_scope": 1
+              },
+              "accuracy_rest": {
+                "n": 1161,
+                "count": 936,
+                "value": 0.806202
+              },
+              "accuracy_gap_vs_rest": {
+                "value": -0.395945,
+                "ci": [
+                  -0.554119,
+                  -0.236931
+                ]
+              }
+            },
+            "model_v1": {
+              "accuracy": {
+                "n": 39,
+                "count": 28,
+                "value": 0.717949,
+                "ci": [
+                  0.564103,
+                  0.846154
+                ]
+              },
+              "macro_f1": {
+                "value": 0.807018,
+                "ci": [
+                  0.68,
+                  0.909091
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 23,
+                "dispute_incorrect_charge_or_fee": 5,
+                "account_payment_inquiry": 11
+              },
+              "accuracy_rest": {
+                "n": 1161,
+                "count": 880,
+                "value": 0.757967
+              },
+              "accuracy_gap_vs_rest": {
+                "value": -0.040019,
+                "ci": [
+                  -0.192142,
+                  0.101145
+                ]
+              }
+            },
+            "model_v2": {
+              "accuracy": {
+                "n": 39,
+                "count": 16,
+                "value": 0.410256,
+                "ci": [
+                  0.25641,
+                  0.564103
+                ]
+              },
+              "macro_f1": {
+                "value": 0.581818,
+                "ci": [
+                  0.408163,
+                  0.721311
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 16,
+                "account_payment_inquiry": 22,
+                "out_of_scope": 1
+              },
+              "accuracy_rest": {
+                "n": 1161,
+                "count": 965,
+                "value": 0.83118
+              },
+              "accuracy_gap_vs_rest": {
+                "value": -0.420924,
+                "ci": [
+                  -0.578258,
+                  -0.262749
+                ]
+              }
+            }
+          },
+          "reading": "accuracy gap vs rest, interval excludes zero: keyword, model_v2"
         }
       },
       "call_vs_batch_disagreements": {
@@ -13450,6 +14060,592 @@
           "target_abs_gap": 0.05,
           "within_target": true
         }
+      },
+      "variants": {
+        "es-MX": {
+          "n": 50,
+          "n_rest": 250,
+          "families": null,
+          "gold_classes": 6,
+          "macro_f1_interpretable": true,
+          "systems": {
+            "keyword": {
+              "accuracy": {
+                "n": 50,
+                "count": 45,
+                "value": 0.9,
+                "ci": [
+                  0.82,
+                  0.98
+                ]
+              },
+              "macro_f1": {
+                "value": 0.922251,
+                "ci": [
+                  0.834735,
+                  0.981647
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 11,
+                "dispute_incorrect_charge_or_fee": 11,
+                "account_payment_inquiry": 12,
+                "card_lost_or_block": 6,
+                "other_complaint": 4,
+                "out_of_scope": 6
+              },
+              "accuracy_rest": {
+                "n": 250,
+                "count": 201,
+                "value": 0.804
+              },
+              "accuracy_gap_vs_rest": {
+                "value": 0.096,
+                "ci": [
+                  -0.0041,
+                  0.188
+                ]
+              }
+            },
+            "model_v1": {
+              "accuracy": {
+                "n": 50,
+                "count": 44,
+                "value": 0.88,
+                "ci": [
+                  0.78,
+                  0.96
+                ]
+              },
+              "macro_f1": {
+                "value": 0.900431,
+                "ci": [
+                  0.799226,
+                  0.969364
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 12,
+                "dispute_incorrect_charge_or_fee": 12,
+                "account_payment_inquiry": 10,
+                "card_lost_or_block": 6,
+                "other_complaint": 5,
+                "out_of_scope": 5
+              },
+              "accuracy_rest": {
+                "n": 250,
+                "count": 218,
+                "value": 0.872
+              },
+              "accuracy_gap_vs_rest": {
+                "value": 0.008,
+                "ci": [
+                  -0.096,
+                  0.104
+                ]
+              }
+            },
+            "model_v2": {
+              "accuracy": {
+                "n": 50,
+                "count": 45,
+                "value": 0.9,
+                "ci": [
+                  0.82,
+                  0.98
+                ]
+              },
+              "macro_f1": {
+                "value": 0.925166,
+                "ci": [
+                  0.840886,
+                  0.982955
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 11,
+                "dispute_incorrect_charge_or_fee": 10,
+                "account_payment_inquiry": 13,
+                "card_lost_or_block": 6,
+                "other_complaint": 4,
+                "out_of_scope": 6
+              },
+              "accuracy_rest": {
+                "n": 250,
+                "count": 207,
+                "value": 0.828
+              },
+              "accuracy_gap_vs_rest": {
+                "value": 0.072,
+                "ci": [
+                  -0.028,
+                  0.16
+                ]
+              }
+            }
+          },
+          "reading": "no accuracy gap shown: every interval includes zero"
+        },
+        "es-CO": {
+          "n": 50,
+          "n_rest": 250,
+          "families": null,
+          "gold_classes": 6,
+          "macro_f1_interpretable": true,
+          "systems": {
+            "keyword": {
+              "accuracy": {
+                "n": 50,
+                "count": 37,
+                "value": 0.74,
+                "ci": [
+                  0.62,
+                  0.86
+                ]
+              },
+              "macro_f1": {
+                "value": 0.736133,
+                "ci": [
+                  0.585525,
+                  0.846829
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 10,
+                "dispute_incorrect_charge_or_fee": 7,
+                "account_payment_inquiry": 14,
+                "card_lost_or_block": 7,
+                "other_complaint": 4,
+                "out_of_scope": 8
+              },
+              "accuracy_rest": {
+                "n": 250,
+                "count": 209,
+                "value": 0.836
+              },
+              "accuracy_gap_vs_rest": {
+                "value": -0.096,
+                "ci": [
+                  -0.232,
+                  0.028
+                ]
+              }
+            },
+            "model_v1": {
+              "accuracy": {
+                "n": 50,
+                "count": 45,
+                "value": 0.9,
+                "ci": [
+                  0.82,
+                  0.98
+                ]
+              },
+              "macro_f1": {
+                "value": 0.901948,
+                "ci": [
+                  0.791096,
+                  0.973954
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 14,
+                "dispute_incorrect_charge_or_fee": 11,
+                "account_payment_inquiry": 7,
+                "card_lost_or_block": 7,
+                "other_complaint": 5,
+                "out_of_scope": 6
+              },
+              "accuracy_rest": {
+                "n": 250,
+                "count": 217,
+                "value": 0.868
+              },
+              "accuracy_gap_vs_rest": {
+                "value": 0.032,
+                "ci": [
+                  -0.0641,
+                  0.116
+                ]
+              }
+            },
+            "model_v2": {
+              "accuracy": {
+                "n": 50,
+                "count": 38,
+                "value": 0.76,
+                "ci": [
+                  0.64,
+                  0.88
+                ]
+              },
+              "macro_f1": {
+                "value": 0.75312,
+                "ci": [
+                  0.601199,
+                  0.861276
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 10,
+                "dispute_incorrect_charge_or_fee": 8,
+                "account_payment_inquiry": 13,
+                "card_lost_or_block": 7,
+                "other_complaint": 4,
+                "out_of_scope": 8
+              },
+              "accuracy_rest": {
+                "n": 250,
+                "count": 214,
+                "value": 0.856
+              },
+              "accuracy_gap_vs_rest": {
+                "value": -0.096,
+                "ci": [
+                  -0.224,
+                  0.024
+                ]
+              }
+            }
+          },
+          "reading": "no accuracy gap shown: every interval includes zero"
+        },
+        "es-AR": {
+          "n": 50,
+          "n_rest": 250,
+          "families": null,
+          "gold_classes": 6,
+          "macro_f1_interpretable": true,
+          "systems": {
+            "keyword": {
+              "accuracy": {
+                "n": 50,
+                "count": 41,
+                "value": 0.82,
+                "ci": [
+                  0.72,
+                  0.92
+                ]
+              },
+              "macro_f1": {
+                "value": 0.827099,
+                "ci": [
+                  0.699744,
+                  0.916006
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 10,
+                "dispute_incorrect_charge_or_fee": 9,
+                "account_payment_inquiry": 10,
+                "card_lost_or_block": 7,
+                "other_complaint": 5,
+                "out_of_scope": 9
+              },
+              "accuracy_rest": {
+                "n": 250,
+                "count": 205,
+                "value": 0.82
+              },
+              "accuracy_gap_vs_rest": {
+                "value": 0.0,
+                "ci": [
+                  -0.1201,
+                  0.116
+                ]
+              }
+            },
+            "model_v1": {
+              "accuracy": {
+                "n": 50,
+                "count": 44,
+                "value": 0.88,
+                "ci": [
+                  0.78,
+                  0.96
+                ]
+              },
+              "macro_f1": {
+                "value": 0.880113,
+                "ci": [
+                  0.74301,
+                  0.963934
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 13,
+                "dispute_incorrect_charge_or_fee": 12,
+                "account_payment_inquiry": 8,
+                "card_lost_or_block": 7,
+                "other_complaint": 6,
+                "out_of_scope": 4
+              },
+              "accuracy_rest": {
+                "n": 250,
+                "count": 218,
+                "value": 0.872
+              },
+              "accuracy_gap_vs_rest": {
+                "value": 0.008,
+                "ci": [
+                  -0.1,
+                  0.1
+                ]
+              }
+            },
+            "model_v2": {
+              "accuracy": {
+                "n": 50,
+                "count": 43,
+                "value": 0.86,
+                "ci": [
+                  0.76,
+                  0.94
+                ]
+              },
+              "macro_f1": {
+                "value": 0.865388,
+                "ci": [
+                  0.744359,
+                  0.949346
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 10,
+                "dispute_incorrect_charge_or_fee": 10,
+                "account_payment_inquiry": 10,
+                "card_lost_or_block": 7,
+                "other_complaint": 5,
+                "out_of_scope": 8
+              },
+              "accuracy_rest": {
+                "n": 250,
+                "count": 209,
+                "value": 0.836
+              },
+              "accuracy_gap_vs_rest": {
+                "value": 0.024,
+                "ci": [
+                  -0.084,
+                  0.124
+                ]
+              }
+            }
+          },
+          "reading": "no accuracy gap shown: every interval includes zero"
+        },
+        "pt-BR": {
+          "n": 135,
+          "n_rest": 165,
+          "families": null,
+          "gold_classes": 6,
+          "macro_f1_interpretable": true,
+          "systems": {
+            "keyword": {
+              "accuracy": {
+                "n": 135,
+                "count": 108,
+                "value": 0.8,
+                "ci": [
+                  0.733333,
+                  0.866667
+                ]
+              },
+              "macro_f1": {
+                "value": 0.811462,
+                "ci": [
+                  0.739859,
+                  0.870992
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 30,
+                "dispute_incorrect_charge_or_fee": 19,
+                "account_payment_inquiry": 36,
+                "card_lost_or_block": 17,
+                "other_complaint": 11,
+                "out_of_scope": 22
+              },
+              "accuracy_rest": {
+                "n": 165,
+                "count": 138,
+                "value": 0.836364
+              },
+              "accuracy_gap_vs_rest": {
+                "value": -0.036364,
+                "ci": [
+                  -0.125253,
+                  0.050505
+                ]
+              }
+            },
+            "model_v1": {
+              "accuracy": {
+                "n": 135,
+                "count": 115,
+                "value": 0.851852,
+                "ci": [
+                  0.792407,
+                  0.911111
+                ]
+              },
+              "macro_f1": {
+                "value": 0.824635,
+                "ci": [
+                  0.744364,
+                  0.89002
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 39,
+                "dispute_incorrect_charge_or_fee": 29,
+                "account_payment_inquiry": 26,
+                "card_lost_or_block": 18,
+                "other_complaint": 8,
+                "out_of_scope": 15
+              },
+              "accuracy_rest": {
+                "n": 165,
+                "count": 147,
+                "value": 0.890909
+              },
+              "accuracy_gap_vs_rest": {
+                "value": -0.039057,
+                "ci": [
+                  -0.114495,
+                  0.039731
+                ]
+              }
+            },
+            "model_v2": {
+              "accuracy": {
+                "n": 135,
+                "count": 111,
+                "value": 0.822222,
+                "ci": [
+                  0.755556,
+                  0.881481
+                ]
+              },
+              "macro_f1": {
+                "value": 0.829926,
+                "ci": [
+                  0.762104,
+                  0.887083
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 31,
+                "dispute_incorrect_charge_or_fee": 21,
+                "account_payment_inquiry": 32,
+                "card_lost_or_block": 17,
+                "other_complaint": 11,
+                "out_of_scope": 23
+              },
+              "accuracy_rest": {
+                "n": 165,
+                "count": 141,
+                "value": 0.854545
+              },
+              "accuracy_gap_vs_rest": {
+                "value": -0.032323,
+                "ci": [
+                  -0.113805,
+                  0.048485
+                ]
+              }
+            }
+          },
+          "reading": "no accuracy gap shown: every interval includes zero"
+        },
+        "mixed": {
+          "n": 15,
+          "n_rest": 285,
+          "families": null,
+          "gold_classes": 6,
+          "macro_f1_interpretable": false,
+          "systems": {
+            "keyword": {
+              "accuracy": {
+                "n": 15,
+                "count": 15,
+                "value": 1.0,
+                "ci": [
+                  1.0,
+                  1.0
+                ]
+              },
+              "macro_f1": {
+                "value": 1.0,
+                "ci": [
+                  0.666667,
+                  1.0
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 5,
+                "dispute_incorrect_charge_or_fee": 3,
+                "account_payment_inquiry": 2,
+                "card_lost_or_block": 2,
+                "other_complaint": 1,
+                "out_of_scope": 2
+              }
+            },
+            "model_v1": {
+              "accuracy": {
+                "n": 15,
+                "count": 14,
+                "value": 0.933333,
+                "ci": [
+                  0.8,
+                  1.0
+                ]
+              },
+              "macro_f1": {
+                "value": 0.942857,
+                "ci": [
+                  0.569375,
+                  1.0
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 4,
+                "dispute_incorrect_charge_or_fee": 3,
+                "account_payment_inquiry": 3,
+                "card_lost_or_block": 2,
+                "other_complaint": 1,
+                "out_of_scope": 2
+              }
+            },
+            "model_v2": {
+              "accuracy": {
+                "n": 15,
+                "count": 15,
+                "value": 1.0,
+                "ci": [
+                  1.0,
+                  1.0
+                ]
+              },
+              "macro_f1": {
+                "value": 1.0,
+                "ci": [
+                  0.666667,
+                  1.0
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 5,
+                "dispute_incorrect_charge_or_fee": 3,
+                "account_payment_inquiry": 2,
+                "card_lost_or_block": 2,
+                "other_complaint": 1,
+                "out_of_scope": 2
+              }
+            }
+          },
+          "reading": "sample too small to conclude"
+        }
       }
     },
     "team": {
@@ -18171,6 +19367,434 @@
           ],
           "target_abs_gap": 0.05,
           "within_target": false
+        }
+      },
+      "variants": {
+        "es-MX": {
+          "n": 16,
+          "n_rest": 45,
+          "families": null,
+          "gold_classes": 6,
+          "macro_f1_interpretable": false,
+          "systems": {
+            "keyword": {
+              "accuracy": {
+                "n": 16,
+                "count": 9,
+                "value": 0.5625,
+                "ci": [
+                  0.3125,
+                  0.8125
+                ]
+              },
+              "macro_f1": {
+                "value": 0.592063,
+                "ci": [
+                  0.286951,
+                  0.768294
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 2,
+                "dispute_incorrect_charge_or_fee": 2,
+                "account_payment_inquiry": 5,
+                "card_lost_or_block": 2,
+                "other_complaint": 2,
+                "out_of_scope": 3
+              }
+            },
+            "model_v1": {
+              "accuracy": {
+                "n": 16,
+                "count": 15,
+                "value": 0.9375,
+                "ci": [
+                  0.8125,
+                  1.0
+                ]
+              },
+              "macro_f1": {
+                "value": 0.920635,
+                "ci": [
+                  0.611111,
+                  1.0
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 3,
+                "dispute_incorrect_charge_or_fee": 3,
+                "account_payment_inquiry": 1,
+                "card_lost_or_block": 1,
+                "other_complaint": 4,
+                "out_of_scope": 4
+              }
+            },
+            "model_v2": {
+              "accuracy": {
+                "n": 16,
+                "count": 10,
+                "value": 0.625,
+                "ci": [
+                  0.375,
+                  0.875
+                ]
+              },
+              "macro_f1": {
+                "value": 0.633333,
+                "ci": [
+                  0.338258,
+                  0.805556
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 2,
+                "dispute_incorrect_charge_or_fee": 3,
+                "account_payment_inquiry": 4,
+                "card_lost_or_block": 2,
+                "other_complaint": 2,
+                "out_of_scope": 3
+              }
+            }
+          },
+          "reading": "sample too small to conclude"
+        },
+        "es-CO": {
+          "n": 13,
+          "n_rest": 48,
+          "families": null,
+          "gold_classes": 6,
+          "macro_f1_interpretable": false,
+          "systems": {
+            "keyword": {
+              "accuracy": {
+                "n": 13,
+                "count": 11,
+                "value": 0.846154,
+                "ci": [
+                  0.615385,
+                  1.0
+                ]
+              },
+              "macro_f1": {
+                "value": 0.891667,
+                "ci": [
+                  0.433333,
+                  1.0
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 1,
+                "dispute_incorrect_charge_or_fee": 2,
+                "account_payment_inquiry": 5,
+                "card_lost_or_block": 1,
+                "other_complaint": 2,
+                "out_of_scope": 2
+              }
+            },
+            "model_v1": {
+              "accuracy": {
+                "n": 13,
+                "count": 11,
+                "value": 0.846154,
+                "ci": [
+                  0.615385,
+                  1.0
+                ]
+              },
+              "macro_f1": {
+                "value": 0.855556,
+                "ci": [
+                  0.444444,
+                  1.0
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 1,
+                "dispute_incorrect_charge_or_fee": 3,
+                "account_payment_inquiry": 2,
+                "card_lost_or_block": 2,
+                "other_complaint": 2,
+                "out_of_scope": 3
+              }
+            },
+            "model_v2": {
+              "accuracy": {
+                "n": 13,
+                "count": 10,
+                "value": 0.769231,
+                "ci": [
+                  0.538462,
+                  1.0
+                ]
+              },
+              "macro_f1": {
+                "value": 0.839683,
+                "ci": [
+                  0.388889,
+                  0.948148
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 1,
+                "dispute_incorrect_charge_or_fee": 3,
+                "account_payment_inquiry": 4,
+                "card_lost_or_block": 1,
+                "other_complaint": 2,
+                "out_of_scope": 2
+              }
+            }
+          },
+          "reading": "sample too small to conclude"
+        },
+        "es-AR": {
+          "n": 10,
+          "n_rest": 51,
+          "families": null,
+          "gold_classes": 6,
+          "macro_f1_interpretable": false,
+          "systems": {
+            "keyword": {
+              "accuracy": {
+                "n": 10,
+                "count": 7,
+                "value": 0.7,
+                "ci": [
+                  0.4,
+                  1.0
+                ]
+              },
+              "macro_f1": {
+                "value": 0.677778,
+                "ci": [
+                  0.266667,
+                  0.777778
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 1,
+                "account_payment_inquiry": 4,
+                "card_lost_or_block": 1,
+                "other_complaint": 2,
+                "out_of_scope": 2
+              }
+            },
+            "model_v1": {
+              "accuracy": {
+                "n": 10,
+                "count": 9,
+                "value": 0.9,
+                "ci": [
+                  0.7,
+                  1.0
+                ]
+              },
+              "macro_f1": {
+                "value": 0.759259,
+                "ci": [
+                  0.320513,
+                  0.833333
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 1,
+                "dispute_incorrect_charge_or_fee": 1,
+                "card_lost_or_block": 2,
+                "other_complaint": 1,
+                "out_of_scope": 5
+              }
+            },
+            "model_v2": {
+              "accuracy": {
+                "n": 10,
+                "count": 9,
+                "value": 0.9,
+                "ci": [
+                  0.7,
+                  1.0
+                ]
+              },
+              "macro_f1": {
+                "value": 0.920635,
+                "ci": [
+                  0.428505,
+                  1.0
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 1,
+                "dispute_incorrect_charge_or_fee": 1,
+                "account_payment_inquiry": 2,
+                "card_lost_or_block": 1,
+                "other_complaint": 2,
+                "out_of_scope": 3
+              }
+            }
+          },
+          "reading": "sample too small to conclude"
+        },
+        "pt-BR": {
+          "n": 13,
+          "n_rest": 48,
+          "families": null,
+          "gold_classes": 6,
+          "macro_f1_interpretable": false,
+          "systems": {
+            "keyword": {
+              "accuracy": {
+                "n": 13,
+                "count": 7,
+                "value": 0.538462,
+                "ci": [
+                  0.307692,
+                  0.771154
+                ]
+              },
+              "macro_f1": {
+                "value": 0.527778,
+                "ci": [
+                  0.214286,
+                  0.620391
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 1,
+                "dispute_incorrect_charge_or_fee": 1,
+                "account_payment_inquiry": 5,
+                "card_lost_or_block": 2,
+                "out_of_scope": 4
+              }
+            },
+            "model_v1": {
+              "accuracy": {
+                "n": 13,
+                "count": 7,
+                "value": 0.538462,
+                "ci": [
+                  0.307692,
+                  0.769231
+                ]
+              },
+              "macro_f1": {
+                "value": 0.550794,
+                "ci": [
+                  0.191667,
+                  0.700051
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 5,
+                "dispute_incorrect_charge_or_fee": 1,
+                "account_payment_inquiry": 2,
+                "card_lost_or_block": 1,
+                "out_of_scope": 4
+              }
+            },
+            "model_v2": {
+              "accuracy": {
+                "n": 13,
+                "count": 10,
+                "value": 0.769231,
+                "ci": [
+                  0.538462,
+                  1.0
+                ]
+              },
+              "macro_f1": {
+                "value": 0.805556,
+                "ci": [
+                  0.408701,
+                  0.933333
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 1,
+                "dispute_incorrect_charge_or_fee": 2,
+                "account_payment_inquiry": 3,
+                "card_lost_or_block": 2,
+                "other_complaint": 1,
+                "out_of_scope": 4
+              }
+            }
+          },
+          "reading": "sample too small to conclude"
+        },
+        "mixed": {
+          "n": 9,
+          "n_rest": 52,
+          "families": null,
+          "gold_classes": 4,
+          "macro_f1_interpretable": false,
+          "systems": {
+            "keyword": {
+              "accuracy": {
+                "n": 9,
+                "count": 4,
+                "value": 0.444444,
+                "ci": [
+                  0.111111,
+                  0.777778
+                ]
+              },
+              "macro_f1": {
+                "value": 0.266667,
+                "ci": [
+                  0.071429,
+                  0.45
+                ]
+              },
+              "predicted": {
+                "dispute_incorrect_charge_or_fee": 1,
+                "account_payment_inquiry": 6,
+                "out_of_scope": 2
+              }
+            },
+            "model_v1": {
+              "accuracy": {
+                "n": 9,
+                "count": 5,
+                "value": 0.555556,
+                "ci": [
+                  0.222222,
+                  0.888889
+                ]
+              },
+              "macro_f1": {
+                "value": 0.316667,
+                "ci": [
+                  0.0625,
+                  0.464286
+                ]
+              },
+              "predicted": {
+                "dispute_unrecognized_charge": 1,
+                "other_complaint": 1,
+                "out_of_scope": 7
+              }
+            },
+            "model_v2": {
+              "accuracy": {
+                "n": 9,
+                "count": 6,
+                "value": 0.666667,
+                "ci": [
+                  0.333333,
+                  1.0
+                ]
+              },
+              "macro_f1": {
+                "value": 0.366667,
+                "ci": [
+                  0.178571,
+                  0.5
+                ]
+              },
+              "predicted": {
+                "account_payment_inquiry": 6,
+                "out_of_scope": 3
+              }
+            }
+          },
+          "reading": "sample too small to conclude"
         }
       }
     }

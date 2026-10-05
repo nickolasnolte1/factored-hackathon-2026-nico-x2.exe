@@ -12,10 +12,11 @@ An AI-first customer service system for a LATAM retail bank (MX / CO / AR), buil
 |---|---|
 | Agent end to end, 140 test scenarios (ES and PT) | 137/140 succeed (97.9%) [95.0, 100.0] |
 | Safe automated resolution, in-scope test scenarios | 77/79 (97.5%) [93.7, 100.0] |
-| Transfers to a person | 0 missed of 29 needed, 0 unnecessary of 111 |
+| Transfers to a person | 0 missed of 29 needed (28 with the right reason), 0 unnecessary of 111 |
 | Unsafe outcomes (wrong customer's data, unconfirmed or ungrounded writes, injected actions) | 0 of 140 (at most 2.1% at 95% confidence) |
-| Intent classifier v2 vs keyword router | Better on all three held-out sets |
-| Model cost | About US$ 0.004 per attempted case (stated price assumptions) |
+| Success by customer country | MX 65/66, CO 37/38, AR 35/36; no gap whose interval excludes zero (segments and language variants in [06](docs/06_evaluation.md#fairness-by-country-segment-and-language-variant)) |
+| Intent classifier v2 vs keyword router | Better macro-F1 on all three held-out sets (paired 95% intervals above zero) |
+| Model cost | About US$ 0.0044 per attempted case (estimate: model tokens only, list DBU rates, an assumed US$ 0.07 per DBU; [06](docs/06_evaluation.md)) |
 
 4. **Read in this order:** why disputes ([02](docs/02_eda_workflow_selection.md)), how it is built and would be operated ([07](docs/07_architecture_and_operations.md)), how it was evaluated ([06](docs/06_evaluation.md)), then the data and tool layers ([04](docs/04_silver_layer.md), [05](docs/05_gold_and_bank_tools.md)).
 
@@ -35,9 +36,9 @@ An AI-first customer service system for a LATAM retail bank (MX / CO / AR), buil
 | `src/scenarios/` | ES/PT scenario generator: Silver anchors, intent dataset and end-to-end agent scenarios ([README](src/scenarios/README.md)) |
 | `src/classifier/` | ES/PT intake intent classifier: keyword baseline, trained model (v1 text only; v2 text plus keyword features, the default), runtime adapter for the app and the final evaluation ([README](src/classifier/README.md)) |
 | `tests/classifier/` | Classifier tests on toy data, including checks that only the evaluation code reads the final test sets |
-| `src/agent_eval/` | End-to-end exam of the real agent (`app/agent.py` with the served model) on the e2e scenarios: a fresh bank per scenario, scoring of what was written to the bank, reply checks, and an oracle mode that must score 280/280 ([README](src/agent_eval/README.md)); `challenge_outcomes.py` reports a saved run in the problem statement's five outcome measures |
+| `src/agent_eval/` | End-to-end exam of the real agent (`app/agent.py` with the served model) on the e2e scenarios: a fresh bank per scenario, scoring of what was written to the bank, reply checks, and an oracle mode that must score 280/280 ([README](src/agent_eval/README.md)); `challenge_outcomes.py` reports a saved run in the problem statement's five outcome measures, and `fairness.py` breaks it down by customer country, segment and language variant |
 | `tests/agent_eval/` | Tests of the exam's scoring on hand-made fixtures and on a scripted model |
-| `eval/results/` | Classifier evaluation (`intent_classifier.*`), agent exam results per split and endpoint (`agent_e2e_<split>_<endpoint>.*`) and the challenge's outcome measures (`challenge_outcomes_<split>_<endpoint>.*`), every number with its 95% interval |
+| `eval/results/` | Classifier evaluation (`intent_classifier.*`), agent exam results per split and endpoint (`agent_e2e_<split>_<endpoint>.*`), the challenge's outcome measures (`challenge_outcomes_<split>_<endpoint>.*`) and the outcomes by country, segment and language variant (`fairness_<split>_<endpoint>.*`), every number with its 95% interval |
 | `docs/` | Data findings, EDA and workflow selection, test scenarios, Silver, Gold and bank tools, the evaluation of the classifier and the agent ([06](docs/06_evaluation.md)), and the architecture and route to operation ([07](docs/07_architecture_and_operations.md)) |
 | `docs/03_test_scenarios.md` | Test scenarios (ES/PT): label provenance, splits and leakage checks, e2e categories, audit results |
 | `docs/04_silver_layer.md` | Silver layer: issue-to-rule mapping, checks, watermark/MERGE semantics, freshness, results |
@@ -93,14 +94,18 @@ python -m src.classifier.evaluate                                   # the only c
 python -m src.agent_eval.run --oracle --split all                  # scorer check without a model: must be 280/280
 python -m src.agent_eval.run --split dev                           # the real agent on the 140 dev scenarios
 python -m src.agent_eval.challenge_outcomes                        # the five outcome measures of a saved run (no model calls)
+python -m src.agent_eval.fairness                                  # outcomes by country, segment and language variant of a saved run (no model calls)
 ```
 
 Data lands in Unity Catalog under `workspace.{bronze,silver,gold,ops}`.
 
 ## Data policy
 
-- The dataset is **synthetic** and provided by the organizers under read-only access. Raw data, organizer PDFs and credentials are **never** committed to this public repository.
-- Any team-generated data (e.g. Portuguese test conversations) is labeled as such.
+- The dataset is **synthetic** and provided by the organizers under read-only access: no real customers, and no real or de-identified customer records. Raw data, organizer PDFs and credentials are **never** committed to this public repository.
+- Team-generated data is labeled as such ([report 03, section 2](docs/03_test_scenarios.md#2-label-provenance); the policy in [section 7](docs/03_test_scenarios.md#7-synthetic-dispute-policy)): the scenario and intent texts in Spanish and Portuguese and the synthetic dispute policy come from automated authoring for the project, the independent holdout from a separate generation process, and the 61-message team holdout was hand-written by one team member.
+- The public demo shows only synthetic test customers, their synthetic movements, and the cases and tickets created in the demo (kept in `/tmp`, gone at restart).
+- The Gold snapshot and the intent classifier model are kept in a private Hugging Face dataset repo and in the team's Databricks workspace, and are never committed (`data/` and `models/` are git-ignored).
+- The organizers' S3 credentials are stored only in a Databricks secret scope, read by the Bronze copy job; they are never in the repository or in either demo.
 
 ## Team
 

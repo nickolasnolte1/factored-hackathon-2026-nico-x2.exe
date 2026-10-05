@@ -1,6 +1,6 @@
 # 07 — Architecture and route to operation
 
-This report describes the system as built, where it uses AI and where it does not, the trade-offs behind those choices, and what it would take to operate it. Details live in the earlier reports and READMEs; each section links to them. Measured figures come from [report 06](06_evaluation.md) and `eval/results/`.
+This report describes the system as built, where it uses AI and where it does not, the trade-offs behind those choices, and what it would take to operate it. Details live in the earlier reports and READMEs; each section links to them. Measured figures are offline measurements on generated scenarios, from [report 06](06_evaluation.md) and `eval/results/`; none of them was measured in production.
 
 ## 1. The system at a glance
 
@@ -28,7 +28,7 @@ flowchart LR
 | Bank tool service | 14 tools behind one pipeline: schema check, session, rate limit, policy gate, handler, audit | [CONTRACT.md](../src/bank_tools/CONTRACT.md) |
 | Agent runtime | One LLM in a bounded loop (at most 8 model calls per customer turn) that holds the session token, wraps app events in a nonce tag, and builds the UI cards only from verified tool results | [app README](../app/README.md), `app/agent.py` |
 | App | Customer chat (ES/PT), secure sign-in form, per-turn trace, specialist console | [app README](../app/README.md) |
-| Deployments | Databricks App `expediente-demo` (workspace login) and a public Hugging Face Space (code public, data and model in a private dataset repo) | [app README](../app/README.md#deploy-as-a-databricks-app) |
+| Deployments | Databricks App `expediente-demo` (workspace login) and a public Hugging Face Space, https://nicocon123-expediente.hf.space (the Space repo holds code only; the Gold snapshot, the test customers and the intent classifier are downloaded from a private dataset repo each time the container starts). Both call the serving endpoint `databricks-gpt-oss-120b` | [app README](../app/README.md#deploy-as-a-databricks-app) |
 
 ## 2. Where AI is used, and where it is not
 
@@ -40,7 +40,7 @@ flowchart LR
 | Which movement is disputed | Deterministic search over the customer's own movements, then the customer picks and confirms | The EDA found the candidate set is tiny (median 1 own movement in 30 days), so this is a lookup plus confirmation, not a learning problem ([report 02](02_eda_workflow_selection.md)) |
 | Eligibility, priority, transfer to a person | Synthetic policy in code (`src/policy/`): 90-day window, 7,000 USD threshold, restricted customers, card compromise, tool failure | Auditable and unit-tested; the same code computes the expected outcome of every test scenario |
 | Opening a case | Service write that needs the confirmation id from the facts the customer saw, an explicit yes detected by the runtime, an idempotency key and a verified read-back | A model cannot open a case by saying so |
-| Amounts and dates as customers write them | Service parser (`src/bank_tools/amounts.py`) and resolution against the service clock | Formats differ by country (thousands separators in COP, "lucas" in ARS, accounts in USD in Mexico) |
+| Amounts and dates as customers write them | Service parser (`src/bank_tools/amounts.py`) and resolution against the service clock | Customers write `1,234.56`, `1.234,56` or Colombia's `1'234.567`, and Mexican accounts are in USD; the parser reads every format the same way for every country. Slang such as "24 lucas" is not parsed (it appears in the intent dataset, not in the e2e scenarios) |
 | Fraud or credit risk | Not modeled | `is_fraud` is unlearnable in this data (temporal AUC 0.504) and `fraud_score` is built from the label; both are documented negative controls ([report 02](02_eda_workflow_selection.md)) |
 
 ## 3. Trade-offs
@@ -48,11 +48,11 @@ flowchart LR
 | Trade-off | Choice | Evidence | What it costs |
 |---|---|---|---|
 | Autonomy vs human oversight | Automate dispute intake end to end; transfer restricted customers, amounts above the threshold, card compromise, tool failures, explicit requests, and requests still unclear after one question | Automation attempted on 79/79 in-scope test scenarios, 0 missed and 0 unnecessary transfers | About 21% of the test scenarios go to a person by design |
-| Accuracy vs latency | `gpt-oss-120b` over faster endpoints | In early smoke tests a faster endpoint skipped steps of the flow; the final agent scores 97.9% on test | Turn latency p50 12.4 s and p95 61.5 s in the exam (several conversations in flight, rate-limited shared endpoint); a few seconds per turn in single-user demo runs, not measured systematically |
-| Cost vs context | The full tool catalog on every model call | One loop, no routing layer, every rule visible to the model | 97% of tokens are prompt (median 15,113 per turn). Still about US$ 0.0044 of model per attempted case ([report 06](06_evaluation.md)); trimming tool descriptions or prompt caching would cut it |
+| Accuracy vs latency | `gpt-oss-120b` over faster endpoints | In early smoke tests a faster endpoint skipped steps of the flow; the final agent scores 97.9% on test | Turn latency p50 12.4 s and p95 61.5 s in the exam (several conversations in flight, rate-limited shared endpoint); single-user latency was not measured |
+| Cost vs context | The full tool catalog on every model call | One loop, no routing layer, every rule visible to the model | 97% of tokens are prompt (median 15,113 per turn). Model cost is still about US$ 0.0044 per attempted case (estimate: model tokens only, list DBU rates, an assumed US$ 0.07 per DBU; [report 06](06_evaluation.md)); trimming tool descriptions or prompt caching would cut it |
 | Rules in code vs model judgment | Policy, identity, ownership and matching in the service | The scripted oracle scores 280/280 through the same scorer; 0 unsafe outcomes in 140 test scenarios | A new rule needs code, tests and a release |
 | Privacy vs convenience | A secure form for the document and the code instead of typing them in the chat | The model context never holds identifiers | A second interaction surface in the UI |
-| Live Gold vs a snapshot for the demo | Local SQLite snapshot of Gold in the demo deployments | No SQL warehouse cold starts (8 s attempt deadline); identical outputs from snapshot and Gold for 4 read tools on 5 customers | Data as of the snapshot; demo cases and tickets live in `/tmp` and end with the instance |
+| Live Gold vs a snapshot for the demo | Local SQLite snapshot of Gold in the demo deployments | No SQL warehouse cold starts (8 s attempt deadline); identical outputs from snapshot and Gold for 4 read tools on 5 customers (an opt-in live test, last run before the latest tool changes; [report 05, section 20](05_gold_and_bank_tools.md)) | Data as of the snapshot; demo cases and tickets live in `/tmp` and end with the instance |
 | One agent vs several | One bounded loop | Simpler to evaluate: one transcript per scenario, one scorer | No specialization per task |
 
 ## 4. Security and privacy controls
@@ -60,18 +60,19 @@ flowchart LR
 - **Identity.** Document type and number plus a 6-digit one-time code (5-minute TTL, 3 attempts), then an HMAC-signed session with an absolute 15-minute TTL, bound to the conversation. A customer number, e-mail, phone or name never authenticates.
 - **Ownership.** Every query carries an ownership predicate; another customer's ids get the same `NOT_FOUND` as unknown ids, and three foreign-resource probes revoke the session.
 - **What the model sees.** No customer id, document, code or session token. Merchant names and other data text arrive wrapped as untrusted text. App events carry a per-conversation nonce the customer cannot forge.
-- **Writes.** Confirmation id, explicit yes in a later customer turn, idempotency key, verified read-back. Case and ticket ids in a reply must come from a tool result, or the reply is replaced.
+- **Writes.** Confirmation id, explicit yes in a later customer turn, idempotency key, verified read-back. Case and ticket ids in a reply must come from a tool result; otherwise, after one re-prompt, the reply is replaced by a fixed text.
 - **Audit.** One redacted record per tool call, linked by an HMAC customer key instead of the id; documents, codes and tokens are never logged ([CONTRACT.md, section 7](../src/bank_tools/CONTRACT.md)).
-- **Testing.** A security review found 12 issues, all fixed with a test each ([report 05, section 24](05_gold_and_bank_tools.md)); the e2e set includes prompt injection, other customers' data, social engineering, expired sessions and tool failures.
+- **Testing.** An internal red-team review of the bank tools (not an independent review) found 12 issues, 1 high, 5 medium and 6 low, all fixed with a test each ([report 05, section 24](05_gold_and_bank_tools.md)); the e2e set includes prompt injection, other customers' data, a sign-in attempt with only a customer number, expired sessions and tool failures.
+- **Data.** All bank data is the organizers' synthetic dataset, with no real customers. The public demo shows synthetic test customers and the cases and tickets created in the demo. The Gold snapshot and the classifier model are kept in a private Hugging Face dataset repo and in the team's Databricks workspace, never in git; the organizers' S3 credentials stay in a Databricks secret scope, in neither the repository nor the demos ([README, Data policy](../README.md#data-policy)).
 
 ## 5. Access controls
 
 | Surface | Control |
 |---|---|
 | Organizer data | Read-only S3 credentials stored as a Databricks secret scope, never in code; raw data and credentials never enter the public repository (pre-commit hook) |
-| Lakehouse | Unity Catalog schemas `bronze`, `silver`, `gold`, `ops`; read access granted per user |
-| Databricks App | Workspace login plus the app's "Can use" permission; the app's service principal has only `CAN_QUERY` on the serving endpoint and no access to tables or warehouses |
-| Public Space | Public repo holds code only; data and model sit in a private dataset repo read with a fine-grained token; the model is called by a service principal limited to `CAN_QUERY`; 400 model turns per day, 3 concurrent turns |
+| Lakehouse | Unity Catalog schemas `bronze`, `silver`, `gold`, `ops` in the team workspace. No grants are scripted in the repository; a service principal that can only read `gold` and write the `ops` tables is listed as production work ([report 05, section 22](05_gold_and_bank_tools.md)) |
+| Databricks App | Workspace login plus the app's "Can use" permission; the app's only resource is the serving endpoint, with `CAN_QUERY`, called by the app's service principal; the app is given no catalog, table or warehouse |
+| Public Space | The Space repo holds code only; the Gold snapshot, the test customers and the intent classifier sit in a private dataset repo, read at start with a fine-grained read token kept as a Space secret; the serving endpoint is called by a service principal limited to `CAN_QUERY`; at most 400 model turns per UTC day across the app (counted in memory, so a restart resets it) and 3 concurrent turns |
 | Specialist console | With `APP_CONSOLE_USERS` set, only the listed e-mails (checked against the Databricks Apps proxy header). Both deployments run with demo controls on, so today anyone who can open the app sees it, on synthetic data and with customer ids masked |
 
 ## 6. Capacity and limits
@@ -81,18 +82,18 @@ flowchart LR
 | Tokens per customer turn | Median 15,113, p95 21,243 | Agent exam, test split |
 | Model calls per turn | Median 3, p95 4 (bounded at 8) | Agent exam |
 | Turn latency | p50 12.4 s, p95 61.5 s, with 221 rate-limit waits | Agent exam (shared pay-per-token endpoint) |
-| Concurrent model turns | 8 (Databricks App), 3 (Space); a turn waiting more than 15 s gets HTTP 503 | `app.yaml`, Space Dockerfile |
-| Live conversations | One process, state in memory, up to 1,000 conversations; 30 new ones per client every 10 minutes; 40 messages each; ends after 60 idle minutes | [app README](../app/README.md) |
-| Data volume | 7,874,194 rows in 12 tables, refreshed as a daily batch (`digital_events` not loaded) | [report 02](02_eda_workflow_selection.md), [report 04](04_silver_layer.md) |
+| Concurrent model turns | 8 (Databricks App), 3 (Space); a turn waiting more than 15 s gets HTTP 503 | `app/server.py` default (not set in `app.yaml`), Space Dockerfile |
+| Live conversations | One process, state in memory, up to 1,000 conversations; 30 new ones per client every 10 minutes; 40 customer messages each; ends after 60 idle minutes | [app README](../app/README.md) |
+| Data volume | 7,874,194 rows in 12 tables (`digital_events` not loaded). The source has one file per day and Silver is built for a daily batch, but all files landed at once and the jobs have only been run manually | [report 02](02_eda_workflow_selection.md), [report 04](04_silver_layer.md) |
 
-The binding constraints are the pay-per-token endpoint's rate limits and the prompt size. The path to more capacity is provisioned throughput for the model (listed at 71.429 DBU per hour for `gpt-oss-120b` in the [Databricks pricing table](https://learn.microsoft.com/en-us/azure/databricks/resources/pricing)), a smaller prompt, and a shared state store so the app can run more than one replica.
+The binding constraints are the pay-per-token endpoint's rate limits and the prompt size. The path to more capacity is provisioned throughput for the model (listed at 71.429 DBU per hour for `gpt-oss-120b` in the [Databricks pricing table](https://learn.microsoft.com/en-us/azure/databricks/resources/pricing), retrieved 2026-10-04), a smaller prompt, and a shared state store so the app can run more than one replica.
 
 ## 7. Monitoring
 
 **What exists today:**
 
 - Pipeline: `ops.pipeline_runs`, `ops.dq_results` and `ops.freshness`, plus a quarantine table per Silver table ([report 04, section 9](04_silver_layer.md)).
-- Agent: the per-turn trace in the app (tools, policy decisions, durations, tokens), one audit record per tool call (JSONL, with a `workspace.ops.tool_audit` sink), and the agent exam as a repeatable measurement with fingerprints of the agent version.
+- Agent: the per-turn trace in the app (tools, policy decisions, durations, tokens), one audit record per tool call (JSONL; the `workspace.ops.tool_audit` sink is used only with the Databricks repository, which the deployments do not run), and the agent exam as a repeatable measurement with fingerprints of the agent version.
 
 **What a production deployment would watch** (none of this is wired into dashboards or alerts yet):
 
@@ -102,7 +103,7 @@ The binding constraints are the pay-per-token endpoint's rate limits and the pro
 | Tool error rates by code, `security_events` | Tool audit | Outages, fault patterns, probing |
 | Outcome mix: cases opened, transfers by reason, containment, replaced replies, fallbacks | Tool audit and runtime trace | Drift in behavior after a model or prompt change |
 | Latency p50 and p95, model retries and 429s, tokens and DBU per day | Runtime trace, serving usage | Cost and service level |
-| Success by language and customer group | Agent exam per release | Fairness regressions |
+| Success by language and customer group | Agent exam per release, broken down by `python -m src.agent_eval.fairness` ([report 06](06_evaluation.md#fairness-by-country-segment-and-language-variant)) | Fairness regressions |
 
 A release would pass the scorer's oracle check (280/280) and the agent exam on the dev split before the test split is touched again.
 
@@ -129,6 +130,6 @@ All data is synthetic. A bank would apply its own record-retention and legal-hol
 | Integrations | A case-management system and the agents' desk instead of mock cases and tickets; status updates and SLA tracking from `first_response_due_at` |
 | Data operations | Deploy the Bronze, Silver and Gold jobs with a chained daily schedule (they are defined in `databricks.yml` and have only been run manually); scheduled retention jobs; a low-latency serving store for Gold instead of the snapshot |
 | Model operations | Dashboards and alerts on the signals above; the agent exam as a release gate; review of a sample of real conversations |
-| Known failure modes | Relative weekdays ("el lunes pasado") should search the period that covers both everyday readings; amounts given as text should never become numbers ([report 06](06_evaluation.md)) |
-| Evaluation | More hand-written messages from more authors (today 61 from one); real customer transcripts (the dataset's are templates); outcomes by country and customer segment |
+| Known failure modes | Relative weekdays ("el lunes pasado") should search the period that covers both everyday readings; amounts given as text should never become numbers, a risk for Argentine and Colombian customers, whose large peso amounts are written with dots as thousands separators ([report 06](06_evaluation.md), [fairness](06_evaluation.md#fairness-by-country-segment-and-language-variant)) |
+| Evaluation | More hand-written messages from more authors (today 61 from one); real customer transcripts (the dataset's are templates); more scenarios per customer group: the outcomes by country, segment and language variant ([report 06](06_evaluation.md#fairness-by-country-segment-and-language-variant)) cannot rule out gaps of several points, and Student customers, es-AR and portunhol texts are too few to read |
 | Compliance | A real, country-specific dispute policy and legal review (the current policy is synthetic); native-speaker review of the Portuguese; an accessibility audit |

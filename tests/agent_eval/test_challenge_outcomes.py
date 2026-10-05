@@ -1,4 +1,6 @@
 """The challenge outcome measures, on a hand-made results file."""
+import os
+
 from src.agent_eval import challenge_outcomes as co
 
 
@@ -72,3 +74,17 @@ def test_markdown_reports_every_outcome():
     for label in ("Safe automated resolution", "Containment", "Missed transfers", "Unnecessary transfers",
                   "Unsafe outcomes", "Turn latency p50 / p95", "Model cost per successful automated resolution"):
         assert label in md
+
+
+def test_the_price_assumption_is_labeled_and_follows_the_given_price():
+    default = co.build(results(SCENARIOS))["efficiency"]["cost_assumptions"]
+    assert default["usd_per_dbu"] == co.DEFAULT_USD_PER_DBU and default["usd_per_dbu_source"] == co.USD_PER_DBU_SOURCE
+    other = co.build(results(SCENARIOS), usd_per_dbu=0.1)["efficiency"]["cost_assumptions"]
+    assert other["usd_per_dbu_source"] == "given with --usd-per-dbu"
+    assert "Cost is an estimate" in co.to_markdown(co.build(results(SCENARIOS)))
+
+
+def test_the_source_path_uses_forward_slashes_on_every_os():
+    r = results(SCENARIOS)
+    r["_path"] = os.path.join(co.REPO, "eval", "results", "agent_e2e_test_databricks-gpt-oss-120b.json")
+    assert co.build(r)["source"] == "eval/results/agent_e2e_test_databricks-gpt-oss-120b.json"

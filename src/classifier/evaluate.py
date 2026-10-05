@@ -52,6 +52,13 @@ model_v2 - keyword and model_v2 - model_v1 are paired (PAIRS). The resamples do 
 scored, so scoring v2 beside v1 leaves every v1 number as it was. Language gaps (ES minus PT) combine the independent
 ES and PT resamples.
 
+Language variants (sets test, independent and team; added after every other number here was known): the keyword
+router, v1 and v2 on the rows of each variant (es-MX, es-CO, es-AR, pt-BR, mixed), with accuracy and macro-F1, and the
+accuracy gap of the variant against the other rows of the set (the two resampled separately). Each variant has its
+own Generator, seeded from the set and variant names (so "mixed" repeats the mixed slice), and adds no draw to any
+other slice, so no number above changes. Rule fixed in advance: a variant with fewer than VARIANT_MIN_N rows, or
+whose rest has fewer, is "sample too small to conclude" and gets no gap.
+
 Outputs in --out:
   intent_classifier.json          every number; no timestamps, so two runs on the same inputs are byte-identical
   intent_classifier.md            the readable tables
@@ -80,6 +87,10 @@ LATENCY_WARMUP = 50
 MD_TEXT_CHARS = 160
 MACRO_F1_MIN_CLASS_ROWS = 5     # below this many rows in a gold class, macro-F1 of the slice is not interpretable
 NOT_INTERPRETABLE = "macro-F1 not interpretable, read accuracy"
+VARIANTS = ("es-MX", "es-CO", "es-AR", "pt-BR", "mixed")   # report order; other variants follow, sorted
+VARIANT_SETS = ("test", "independent", "team")
+VARIANT_MIN_N = 20              # fixed in advance: a smaller variant (or rest) is not compared
+TOO_SMALL = "sample too small to conclude"
 
 CLASSES = data.CLASSES
 ABSTAIN = data.ABSTAIN          # prediction code of an abstention: it matches no class
@@ -446,6 +457,65 @@ def language_gap(slices, boots, sys_name):
             "target_abs_gap": LANGUAGE_GAP_TARGET, "within_target": bool(abs(gap) <= LANGUAGE_GAP_TARGET)}
 
 
+def variant_positions(info):
+    """Row positions of each language variant, in VARIANTS order (others sorted after; a missing one is "unknown")."""
+    names = np.array([v or "unknown" for v in info["variant"]], dtype=object)
+    present = set(names.tolist())
+    order = [v for v in VARIANTS if v in present] + sorted(present - set(VARIANTS))
+    return {v: np.flatnonzero(names == v) for v in order}
+
+
+def variant_block(name, rows, systems, boot, seed, min_n=VARIANT_MIN_N):
+    """The keyword router and the bilingual models on each language variant of a set: accuracy and macro-F1 with
+    intervals and, when the variant and the rest of the set both have at least min_n rows, the accuracy gap of the
+    variant minus the rest (resampled separately). Uses its own Generators, so no other number changes."""
+    info = row_info(rows)
+    keys = ["keyword"] + [model_key(release) for release in RELEASES]
+    everyone = np.arange(len(rows))
+    out = {}
+    for variant, pos in variant_positions(info).items():
+        sub = take(info, pos)
+        rest = np.setdiff1d(everyone, pos)
+        n = len(pos)
+        weights = resample_weights(n, boot, stream(seed, name, variant))
+        compared = n >= min_n and len(rest) >= min_n
+        rest_weights = resample_weights(len(rest), boot, stream(seed, name, "rest of " + variant)) if compared else None
+        labels = gold_labels(sub["intent"])
+        families = {rows[i].get("family_id") for i in pos} - {None}
+        block = {"n": n, "n_rest": len(rest), "families": len(families) if families else None,
+                 "gold_classes": len(labels),
+                 "macro_f1_interpretable": min(int((sub["intent"] == c).sum()) for c in labels)
+                 >= MACRO_F1_MIN_CLASS_ROWS,
+                 "systems": {}}
+        excludes = []
+        for key in keys:
+            pred = systems[key]["pred"][pos]
+            correct = is_correct(pred, sub["accept"])
+            truth = np.where(correct, pred, sub["intent"])
+            ones = np.ones(n, dtype=bool)
+            entry = {"accuracy": _counted(rate(correct, ones), rate(correct, ones, weights), n, correct.sum()),
+                     "macro_f1": estimate(macro_f1(truth, pred, labels), macro_f1(truth, pred, labels, weights)),
+                     "predicted": {c: int((pred == i).sum()) for i, c in enumerate(CLASSES) if (pred == i).any()}}
+            if compared:
+                rest_correct = is_correct(systems[key]["pred"][rest], info["accept"][rest])
+                rest_ones = np.ones(len(rest), dtype=bool)
+                rest_acc = rate(rest_correct, rest_ones)
+                entry["accuracy_rest"] = {"n": int(len(rest)), "count": int(rest_correct.sum()), "value": rest_acc}
+                ci = interval(rate(correct, ones, weights) - rate(rest_correct, rest_ones, rest_weights))
+                entry["accuracy_gap_vs_rest"] = {"value": entry["accuracy"]["value"] - rest_acc, "ci": ci}
+                if ci is not None and (ci[0] > 0 or ci[1] < 0):
+                    excludes.append(key)
+            block["systems"][key] = entry
+        if not compared:
+            block["reading"] = TOO_SMALL
+        elif excludes:
+            block["reading"] = "accuracy gap vs rest, interval excludes zero: " + ", ".join(excludes)
+        else:
+            block["reading"] = "no accuracy gap shown: every interval includes zero"
+        out[variant] = block
+    return out
+
+
 # ---------------------------------------------------------------- predictions
 
 def model_systems(clf, rows):
@@ -682,6 +752,11 @@ def evaluate(model_dirs=None, boot=BOOT, seed=SEED, paths=None, latency=True):
             "calibration": "ECE on the top probability (correct = top intent acceptable), multi-class Brier against "
                            "the effective label, log-loss of the probability mass on the acceptable intents",
             "interval": f"{int(LEVEL * 100)}% percentile bootstrap over rows; paired across systems within a slice",
+            "variants": f"sets {', '.join(VARIANT_SETS)}: keyword router and bilingual models on the rows of each "
+                        "language variant, with the accuracy gap of the variant minus the other rows of the set "
+                        "(resampled separately); added after every other number in this report was known, from the "
+                        f"same predictions; fixed in advance: fewer than {VARIANT_MIN_N} rows in the variant or in "
+                        f"the rest is \"{TOO_SMALL}\" and gets no gap",
         },
         "settings": {"boot": boot, "seed": seed, "level": LEVEL, "language_gap_target": LANGUAGE_GAP_TARGET},
         "policy": {**file_entry(data.POLICY_PATH), "min_intent_confidence": threshold},
@@ -717,6 +792,8 @@ def evaluate(model_dirs=None, boot=BOOT, seed=SEED, paths=None, latency=True):
             key = model_key(release)
             systems[key], systems[key + THRESHOLD], results[key] = model_systems(models[release]["bilingual"], rows)
         report["sets"][name], boots[name] = evaluate_set(name, rows, systems, boot, seed)
+        if name in VARIANT_SETS:
+            report["sets"][name]["variants"] = variant_block(name, rows, systems, boot, seed)
         keep[name] = (rows, systems, results)
 
     systems_t = baseline_systems(transfer_rows, majority_t)
@@ -964,6 +1041,45 @@ def _glance(report):
     return out
 
 
+def _variants_section(report):
+    """The "By language variant" section: each variant's accuracy and macro-F1, then its accuracy gap vs the rest."""
+    sets = [s for s in VARIANT_SETS if _slices(report, s) and "variants" in report["sets"][s]]
+    if not sets:
+        return []
+    keys = ["keyword"] + [model_key(release) for release in RELEASES]
+    out = ["## By language variant", "",
+           "The keyword router and both bilingual models (forced choice) on the rows of each language variant. This "
+           "section was added after every other number in this report was known; it re-slices the same predictions "
+           "and changes no model, rule or threshold. Fixed in advance: a variant with fewer than "
+           f"{VARIANT_MIN_N} rows, or whose rest of the set has fewer, is \"{TOO_SMALL}\" and is not compared. "
+           "The generated test split comes in paraphrase families (column Families), and the intervals resample "
+           "rows, not families: there a variant gap also reflects which families and intents the variant holds.", ""]
+    rows = []
+    for name in sets:
+        for variant, block in report["sets"][name]["variants"].items():
+            sy = block["systems"]
+            notes = [TOO_SMALL] if "accuracy_gap_vs_rest" not in sy["keyword"] else []
+            if not block["macro_f1_interpretable"]:
+                notes.append(NOT_INTERPRETABLE)
+            families = "" if block.get("families") is None else block["families"]
+            rows.append([name, variant, block["n"], families] + [_share(sy[k]["accuracy"]) for k in keys]
+                        + [_est(sy[k]["macro_f1"]) for k in keys] + ["; ".join(notes)])
+    out += _table(["Set", "Variant", "n", "Families"] + [f"{_label(k)} accuracy" for k in keys]
+                  + [f"{_label(k)} macro-F1" for k in keys] + ["Note"], rows) + [""]
+    rows = []
+    for name in sets:
+        for variant, block in report["sets"][name]["variants"].items():
+            sy = block["systems"]
+            if "accuracy_gap_vs_rest" not in sy["keyword"]:
+                continue
+            rows.append([name, variant, block["n"], block["n_rest"]]
+                        + [_signed(sy[k]["accuracy_gap_vs_rest"]) for k in keys] + [block["reading"]])
+    out += ["Accuracy of the variant minus accuracy on the other rows of the same set (the two resampled "
+            "separately). A gap is a disparity to investigate only when its interval excludes zero.", ""]
+    out += _table(["Set", "Variant", "n", "Rest n"] + [f"{_label(k)} gap" for k in keys] + ["Reading"], rows) + [""]
+    return out
+
+
 def render_markdown(report):
     """The readable tables, built from the cleaned report so both files show the same numbers."""
     models = report["models"]
@@ -1181,6 +1297,8 @@ def render_markdown(report):
             line += f"; on ES test {_signed(change['model_es_only_on_es_test'])}"
         out.append(line + ".")
     out += [""]
+
+    out += _variants_section(report)
 
     out += ["## Confusion matrices (slice all)", "", "Rows are the effective label, columns the prediction.", ""]
     short = {c: c.replace("dispute_", "").replace("_charge_or_fee", "").replace("_charge", "")

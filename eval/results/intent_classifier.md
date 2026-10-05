@@ -352,6 +352,42 @@ ES minus PT macro-F1 (target: absolute gap at most 0.05). The ES-only rows use t
 - v2, bilingual minus ES-only: on PT test +0.008 [-0.000, +0.017]; on ES test +0.006 [-0.001, +0.014].
 - ES-only v2 minus ES-only v1: on PT test +0.103 [+0.068, +0.140]; on ES test +0.065 [+0.027, +0.107].
 
+## By language variant
+
+The keyword router and both bilingual models (forced choice) on the rows of each language variant. This section was added after every other number in this report was known; it re-slices the same predictions and changes no model, rule or threshold. Fixed in advance: a variant with fewer than 20 rows, or whose rest of the set has fewer, is "sample too small to conclude" and is not compared. The generated test split comes in paraphrase families (column Families), and the intervals resample rows, not families: there a variant gap also reflects which families and intents the variant holds.
+
+| Set | Variant | n | Families | Keyword accuracy | Model v1 accuracy | Model v2 accuracy | Keyword macro-F1 | Model v1 macro-F1 | Model v2 macro-F1 | Note |
+|---|---|---|---|---|---|---|---|---|---|---|
+| test | es-MX | 152 | 8 | 0.711 [0.638, 0.783] (108/152) | 0.868 [0.816, 0.914] (132/152) | 0.763 [0.697, 0.829] (116/152) | 0.723 [0.648, 0.787] | 0.830 [0.756, 0.891] | 0.755 [0.680, 0.818] |  |
+| test | es-CO | 318 | 12 | 0.830 [0.789, 0.871] (264/318) | 0.733 [0.686, 0.780] (233/318) | 0.827 [0.786, 0.868] (263/318) | 0.791 [0.741, 0.838] | 0.721 [0.669, 0.770] | 0.784 [0.733, 0.833] |  |
+| test | es-AR | 130 | 9 | 0.792 [0.723, 0.862] (103/130) | 0.792 [0.715, 0.862] (103/130) | 0.823 [0.754, 0.885] (107/130) | 0.730 [0.639, 0.807] | 0.745 [0.649, 0.823] | 0.743 [0.649, 0.820] |  |
+| test | pt-BR | 561 | 14 | 0.822 [0.790, 0.852] (461/561) | 0.734 [0.699, 0.768] (412/561) | 0.854 [0.825, 0.882] (479/561) | 0.834 [0.804, 0.861] | 0.713 [0.673, 0.748] | 0.861 [0.832, 0.888] |  |
+| test | mixed | 39 | 1 | 0.410 [0.256, 0.564] (16/39) | 0.718 [0.564, 0.846] (28/39) | 0.410 [0.256, 0.564] (16/39) | 0.582 [0.408, 0.721] | 0.807 [0.680, 0.909] | 0.582 [0.408, 0.721] |  |
+| independent | es-MX | 50 |  | 0.900 [0.820, 0.980] (45/50) | 0.880 [0.780, 0.960] (44/50) | 0.900 [0.820, 0.980] (45/50) | 0.922 [0.835, 0.982] | 0.900 [0.799, 0.969] | 0.925 [0.841, 0.983] |  |
+| independent | es-CO | 50 |  | 0.740 [0.620, 0.860] (37/50) | 0.900 [0.820, 0.980] (45/50) | 0.760 [0.640, 0.880] (38/50) | 0.736 [0.586, 0.847] | 0.902 [0.791, 0.974] | 0.753 [0.601, 0.861] |  |
+| independent | es-AR | 50 |  | 0.820 [0.720, 0.920] (41/50) | 0.880 [0.780, 0.960] (44/50) | 0.860 [0.760, 0.940] (43/50) | 0.827 [0.700, 0.916] | 0.880 [0.743, 0.964] | 0.865 [0.744, 0.949] |  |
+| independent | pt-BR | 135 |  | 0.800 [0.733, 0.867] (108/135) | 0.852 [0.792, 0.911] (115/135) | 0.822 [0.756, 0.881] (111/135) | 0.811 [0.740, 0.871] | 0.825 [0.744, 0.890] | 0.830 [0.762, 0.887] |  |
+| independent | mixed | 15 |  | 1.000 [1.000, 1.000] (15/15) | 0.933 [0.800, 1.000] (14/15) | 1.000 [1.000, 1.000] (15/15) | 1.000 [0.667, 1.000] | 0.943 [0.569, 1.000] | 1.000 [0.667, 1.000] | sample too small to conclude; macro-F1 not interpretable, read accuracy |
+| team | es-MX | 16 |  | 0.562 [0.312, 0.812] (9/16) | 0.938 [0.812, 1.000] (15/16) | 0.625 [0.375, 0.875] (10/16) | 0.592 [0.287, 0.768] | 0.921 [0.611, 1.000] | 0.633 [0.338, 0.806] | sample too small to conclude; macro-F1 not interpretable, read accuracy |
+| team | es-CO | 13 |  | 0.846 [0.615, 1.000] (11/13) | 0.846 [0.615, 1.000] (11/13) | 0.769 [0.538, 1.000] (10/13) | 0.892 [0.433, 1.000] | 0.856 [0.444, 1.000] | 0.840 [0.389, 0.948] | sample too small to conclude; macro-F1 not interpretable, read accuracy |
+| team | es-AR | 10 |  | 0.700 [0.400, 1.000] (7/10) | 0.900 [0.700, 1.000] (9/10) | 0.900 [0.700, 1.000] (9/10) | 0.678 [0.267, 0.778] | 0.759 [0.321, 0.833] | 0.921 [0.429, 1.000] | sample too small to conclude; macro-F1 not interpretable, read accuracy |
+| team | pt-BR | 13 |  | 0.538 [0.308, 0.771] (7/13) | 0.538 [0.308, 0.769] (7/13) | 0.769 [0.538, 1.000] (10/13) | 0.528 [0.214, 0.620] | 0.551 [0.192, 0.700] | 0.806 [0.409, 0.933] | sample too small to conclude; macro-F1 not interpretable, read accuracy |
+| team | mixed | 9 |  | 0.444 [0.111, 0.778] (4/9) | 0.556 [0.222, 0.889] (5/9) | 0.667 [0.333, 1.000] (6/9) | 0.267 [0.071, 0.450] | 0.317 [0.062, 0.464] | 0.367 [0.179, 0.500] | sample too small to conclude; macro-F1 not interpretable, read accuracy |
+
+Accuracy of the variant minus accuracy on the other rows of the same set (the two resampled separately). A gap is a disparity to investigate only when its interval excludes zero.
+
+| Set | Variant | n | Rest n | Keyword gap | Model v1 gap | Model v2 gap | Reading |
+|---|---|---|---|---|---|---|---|
+| test | es-MX | 152 | 1048 | -0.095 [-0.170, -0.017] | +0.128 [+0.070, +0.184] | -0.062 [-0.132, +0.007] | accuracy gap vs rest, interval excludes zero: keyword, model_v1 |
+| test | es-CO | 318 | 882 | +0.050 [-0.001, +0.100] | -0.033 [-0.089, +0.021] | +0.013 [-0.035, +0.061] | no accuracy gap shown: every interval includes zero |
+| test | es-AR | 130 | 1070 | -0.001 [-0.074, +0.068] | +0.040 [-0.039, +0.117] | +0.006 [-0.066, +0.071] | no accuracy gap shown: every interval includes zero |
+| test | pt-BR | 561 | 639 | +0.053 [+0.006, +0.099] | -0.042 [-0.089, +0.008] | +0.068 [+0.024, +0.112] | accuracy gap vs rest, interval excludes zero: keyword, model_v2 |
+| test | mixed | 39 | 1161 | -0.396 [-0.554, -0.237] | -0.040 [-0.192, +0.101] | -0.421 [-0.578, -0.263] | accuracy gap vs rest, interval excludes zero: keyword, model_v2 |
+| independent | es-MX | 50 | 250 | +0.096 [-0.004, +0.188] | +0.008 [-0.096, +0.104] | +0.072 [-0.028, +0.160] | no accuracy gap shown: every interval includes zero |
+| independent | es-CO | 50 | 250 | -0.096 [-0.232, +0.028] | +0.032 [-0.064, +0.116] | -0.096 [-0.224, +0.024] | no accuracy gap shown: every interval includes zero |
+| independent | es-AR | 50 | 250 | +0.000 [-0.120, +0.116] | +0.008 [-0.100, +0.100] | +0.024 [-0.084, +0.124] | no accuracy gap shown: every interval includes zero |
+| independent | pt-BR | 135 | 165 | -0.036 [-0.125, +0.051] | -0.039 [-0.114, +0.040] | -0.032 [-0.114, +0.048] | no accuracy gap shown: every interval includes zero |
+
 ## Confusion matrices (slice all)
 
 Rows are the effective label, columns the prediction.

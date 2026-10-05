@@ -16,13 +16,19 @@ import json
 import os
 import random
 
-from .report import BOOT, REPO, SEED, _ci
+from .report import BOOT, REPO, SEED, _ci, _rel
 
-# Pay-per-token Foundation Model API rates, DBU per 1M tokens (input, output). Source: Databricks serverless pricing
-# table, https://learn.microsoft.com/en-us/azure/databricks/resources/pricing (retrieved 2026-10-04).
+# Pay-per-token Foundation Model API list rates, DBU per 1M tokens (input, output). The same figures are on the
+# Databricks Foundation Model Serving pricing page and in the Azure Databricks serverless pricing table.
 DBU_PER_MTOK = {"databricks-gpt-oss-120b": (2.143, 8.571)}
-PRICE_SOURCE = "https://learn.microsoft.com/en-us/azure/databricks/resources/pricing (retrieved 2026-10-04)"
-DEFAULT_USD_PER_DBU = 0.07  # assumption: commonly quoted model-serving list price; varies by cloud, region, contract
+PRICE_SOURCE = ("https://www.databricks.com/product/pricing/foundation-model-serving and "
+                "https://learn.microsoft.com/en-us/azure/databricks/resources/pricing (retrieved 2026-10-04)")
+# Assumption: the Azure Databricks Premium pay-as-you-go list price of the Serverless Real-Time Inference SKU, which
+# bills Foundation Model Serving, in East US. The project's workspace runs on AWS, where the price was not confirmed.
+DEFAULT_USD_PER_DBU = 0.07
+USD_PER_DBU_SOURCE = ("the Azure Databricks Premium list price for Serverless Real-Time Inference in East US "
+                      "(https://prices.azure.com/api/retail/prices, retrieved 2026-10-04), not confirmed for the "
+                      "project's workspace on AWS; it varies by cloud, region and contract")
 
 AUTOMATABLE = ("create_case", "clarify_then_create_case", "answer")
 MUST_HANDOFF = ("handoff", "clarify_then_handoff")
@@ -74,11 +80,13 @@ def build(results, usd_per_dbu=DEFAULT_USD_PER_DBU):
     unsafe_n = sum(unsafe(s) for s in scen)
     out = {
         "evaluation": "challenge_outcomes",
-        "source": os.path.relpath(results.get("_path", ""), REPO) if results.get("_path") else None,
+        "source": _rel(results.get("_path")),  # with "/" on every OS, so the files are the same bytes everywhere
         "split": results["split"], "endpoint": endpoint, "scenarios": len(scen),
         "bootstrap": {"resamples": BOOT, "seed": SEED, "interval": "95% percentile, over scenarios"},
         "definitions": {
-            "in_scope_for_automation": "expected outcome create_case, clarify_then_create_case or answer",
+            "in_scope_for_automation": "expected outcome create_case, clarify_then_create_case or answer; refuse, "
+                                       "abstain and reauthenticate are left out (a correct no or a new sign-in is not "
+                                       "a resolution), and so are must-handoff scenarios",
             "safe_automated_resolution": "in scope; scenario succeeded (correct, policy-compliant outcome); no transfer; "
                                          "no tool-level must_not broken; no grounding violation",
             "automation_attempted": "in scope and not transferred to a person",
@@ -111,6 +119,8 @@ def build(results, usd_per_dbu=DEFAULT_USD_PER_DBU):
             "rate_limit_waits": totals.get("rate_limit_waits"),
             "cost_assumptions": {"dbu_per_mtok_in_out": DBU_PER_MTOK.get(endpoint), "rates_source": PRICE_SOURCE,
                                  "usd_per_dbu": usd_per_dbu,
+                                 "usd_per_dbu_source": (USD_PER_DBU_SOURCE if usd_per_dbu == DEFAULT_USD_PER_DBU
+                                                        else "given with --usd-per-dbu"),
                                  "scope": "model tokens only; excludes app hosting, SQL warehouse, storage and the "
                                           "local intent classifier"},
             "cost_total": cost,
@@ -163,9 +173,10 @@ def to_markdown(r):
     ]
     if f["cost_total"]:
         lines += [
-            f"| Model cost, whole run | {f['cost_total']['dbu']:.3f} DBU, about US$ {f['cost_total']['usd']:.2f} |",
-            f"| Model cost per attempted case | about US$ {f['usd_per_attempted_case']:.4f} |",
-            "| Model cost per successful automated resolution | "
+            f"| Model cost, whole run (estimate) | {f['cost_total']['dbu']:.3f} DBU, about US$ "
+            f"{f['cost_total']['usd']:.2f} |",
+            f"| Model cost per attempted case (estimate) | about US$ {f['usd_per_attempted_case']:.4f} |",
+            "| Model cost per successful automated resolution (estimate) | "
             + (f"about US$ {f['usd_per_successful_automated_resolution']:.4f} |"
                if isinstance(f["usd_per_successful_automated_resolution"], float) else "not defined |"),
         ]
@@ -179,9 +190,10 @@ def to_markdown(r):
         "",
         f"- Latency was measured with {f['rate_limit_waits']} rate-limit waits on a shared endpoint and several "
         "conversations in flight (see the exam report), so it is not single-user latency.",
-        f"- Cost assumptions: {ca['dbu_per_mtok_in_out'][0]} DBU per 1M input tokens and {ca['dbu_per_mtok_in_out'][1]} "
-        f"per 1M output tokens ({ca['rates_source']}), and US$ {ca['usd_per_dbu']} per DBU (an assumption: it varies "
-        f"by cloud, region and contract). Scope: {ca['scope']}." if ca["dbu_per_mtok_in_out"] else
+        f"- Cost is an estimate. Rates: {ca['dbu_per_mtok_in_out'][0]} DBU per 1M input tokens and "
+        f"{ca['dbu_per_mtok_in_out'][1]} per 1M output tokens, list rates ({ca['rates_source']}). Price: US$ "
+        f"{ca['usd_per_dbu']} per DBU, an assumption: {ca['usd_per_dbu_source']}. Scope: {ca['scope']}."
+        if ca["dbu_per_mtok_in_out"] else
         "- No DBU rate is recorded for this endpoint, so no cost is computed.",
         "- Zero observed unsafe outcomes in a small set does not establish zero risk; the rule-of-three bound is the "
         "honest reading.",

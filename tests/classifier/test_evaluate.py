@@ -478,6 +478,66 @@ def test_system_labels():
                                                      "model_v1", "model_v2", "model_es_only_v1", "model_es_only_v2")}
 
 
+# ---------------------------------------------------------------- language variants
+
+def _variant_rows():
+    """25 es-MX rows the systems get right, 25 pt-BR rows they get wrong, 3 mixed rows (too few to compare)."""
+    rows = _rows([(U, [U], "es", None)] * 25 + [(I, [I], "pt", None)] * 25 + [(O, [O], "pt", None)] * 3)
+    for row in rows[50:]:
+        row["variant"] = "mixed"
+    for k, row in enumerate(rows):
+        row["family_id"] = f"fam-{row['variant']}-{k % 2}"
+    pred = np.array([U] * 25 + [U] * 25 + [O, U, O])
+    systems = {key: {"pred": pred.copy()} for key in ("majority", "keyword", "model_v1", "model_v2")}
+    return rows, systems
+
+
+def test_variant_block_counts_rates_and_the_small_sample_rule():
+    rows, systems = _variant_rows()
+    block = evaluate.variant_block("test", rows, systems, boot=200, seed=5)
+    assert list(block) == ["es-MX", "pt-BR", "mixed"]
+    assert [block[v]["n"] for v in block] == [25, 25, 3] and block["es-MX"]["families"] == 2
+    for v, entry in block.items():
+        assert list(entry["systems"]) == ["keyword", "model_v1", "model_v2"]
+    mx = block["es-MX"]["systems"]["model_v2"]
+    assert (mx["accuracy"]["count"], mx["accuracy"]["n"]) == (25, 25)
+    assert block["mixed"]["systems"]["keyword"]["predicted"] == {data.CLASSES[U]: 1, data.CLASSES[O]: 2}
+    assert mx["accuracy_rest"] == {"n": 28, "count": 2, "value": pytest.approx(2 / 28)}
+    assert mx["accuracy_gap_vs_rest"]["value"] == pytest.approx(1 - 2 / 28)
+    assert mx["accuracy_gap_vs_rest"]["ci"][0] > 0
+    assert block["es-MX"]["reading"].startswith("accuracy gap vs rest, interval excludes zero")
+    small = block["mixed"]
+    assert small["reading"] == evaluate.TOO_SMALL
+    assert all("accuracy_gap_vs_rest" not in s for s in small["systems"].values())
+
+
+def test_the_mixed_variant_repeats_the_mixed_slice():
+    """Each variant draws from its own generator named after the set and the variant, so "mixed" gives the mixed
+    slice's numbers and the other slices are untouched."""
+    rows, systems = _variant_rows()
+    result, _ = evaluate.evaluate_set("test", rows, systems, boot=200, seed=5)
+    block = evaluate.variant_block("test", rows, systems, boot=200, seed=5)
+    for key in ("keyword", "model_v1", "model_v2"):
+        sl = result["slices"]["mixed"]["systems"][key]
+        assert block["mixed"]["systems"][key]["accuracy"] == sl["accuracy"]
+        assert block["mixed"]["systems"][key]["macro_f1"] == sl["macro_f1"]
+    again, _ = evaluate.evaluate_set("test", rows, systems, boot=200, seed=5)
+    assert evaluate.clean(again) == evaluate.clean(result)
+
+
+def test_toy_report_has_variant_tables_for_the_three_final_sets(toy_inputs):
+    root, _, _ = toy_inputs
+    report = _run(toy_inputs, "g")
+    for name in evaluate.VARIANT_SETS:
+        variants = report["sets"][name]["variants"]
+        assert sum(v["n"] for v in variants.values()) == report["sets"][name]["n"]
+        assert set(variants) <= set(evaluate.VARIANTS)
+    assert "variants" not in report["sets"]["transfer_pt"]
+    assert "variants" in report["scoring"]
+    md = (root / "g" / evaluate.MD_FILE).read_text(encoding="utf-8")
+    assert md.index("## Language transfer") < md.index("## By language variant") < md.index("## Confusion matrices")
+
+
 def test_majority_class_breaks_ties_in_class_order():
     rows = [{"intent": "other_complaint"}, {"intent": "account_payment_inquiry"}]
     assert evaluate.majority_class(rows)[0] == "account_payment_inquiry"
