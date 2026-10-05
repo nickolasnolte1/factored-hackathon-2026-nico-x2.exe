@@ -4,7 +4,7 @@ An AI-first customer service system for a LATAM retail bank (MX / CO / AR), buil
 
 ## Start here (5 minutes)
 
-1. **Try it.** Live demo: https://nicocon123-expediente.hf.space (public, synthetic data, limited daily usage). Pick a test customer in the sidebar; the simulated phone shows the one-time code. The same app runs as the Databricks App `expediente-demo` in the team workspace.
+1. **Try it.** Live demo: https://nicocon123-expediente.hf.space (public, synthetic data, limited daily usage). Pick a test customer in the sidebar; the simulated phone shows the one-time code. The Hugging Face Space only hosts the web page, because a Databricks App cannot be opened without a workspace login: every reply comes from the model served on Databricks (`databricks-gpt-oss-120b`), and the bank data is a snapshot of the Gold layer built on Databricks. The same app is also deployed as the Databricks App `expediente-demo` in the team workspace (workspace login needed).
 2. **Watch it.** Video pitch: https://drive.google.com/file/d/1Y9NDcfUnlr13FtUGLLstPGJnolGDKZnG/view?usp=sharing
 3. **Check the results** (held-out, offline, 95% intervals):
 
