@@ -2,11 +2,22 @@
 
 An AI-first customer service system for a LATAM retail bank (MX / CO / AR), built end-to-end on Databricks: from raw data ingestion and quality contracts to a controlled, auditable conversational agent with human handoff.
 
-**Live demo:** https://nicocon123-expediente.hf.space (public, synthetic data, limited daily usage; the same app also runs as the Databricks App `expediente-demo` in the team workspace). Try a test customer from the sidebar: the simulated phone shows the one-time code.
+## Start here (5 minutes)
 
-**Video pitch:** https://drive.google.com/file/d/1Y9NDcfUnlr13FtUGLLstPGJnolGDKZnG/view?usp=sharing
+1. **Try it.** Live demo: https://nicocon123-expediente.hf.space (public, synthetic data, limited daily usage). Pick a test customer in the sidebar; the simulated phone shows the one-time code. The same app runs as the Databricks App `expediente-demo` in the team workspace.
+2. **Watch it.** Video pitch: https://drive.google.com/file/d/1Y9NDcfUnlr13FtUGLLstPGJnolGDKZnG/view?usp=sharing
+3. **Check the results** (held-out, offline, 95% intervals):
 
-> Status: 🚧 in progress (challenge window: Sep 25 – Oct 5, 2026). Held-out results: the agent completes 137 of 140 test scenarios (97.9%, 95% interval 95.0–100.0) and the intent classifier beats the keyword baseline on all three held-out sets; see [docs/06_evaluation.md](docs/06_evaluation.md).
+| What | Result |
+|---|---|
+| Agent end to end, 140 test scenarios (ES and PT) | 137/140 succeed (97.9%) [95.0, 100.0] |
+| Safe automated resolution, in-scope test scenarios | 77/79 (97.5%) [93.7, 100.0] |
+| Transfers to a person | 0 missed of 29 needed, 0 unnecessary of 111 |
+| Unsafe outcomes (wrong customer's data, unconfirmed or ungrounded writes, injected actions) | 0 of 140 (at most 2.1% at 95% confidence) |
+| Intent classifier v2 vs keyword router | Better on all three held-out sets |
+| Model cost | About US$ 0.004 per attempted case (stated price assumptions) |
+
+4. **Read in this order:** why disputes ([02](docs/02_eda_workflow_selection.md)), how it is built and would be operated ([07](docs/07_architecture_and_operations.md)), how it was evaluated ([06](docs/06_evaluation.md)), then the data and tool layers ([04](docs/04_silver_layer.md), [05](docs/05_gold_and_bank_tools.md)).
 
 ## Repository layout
 
@@ -24,10 +35,10 @@ An AI-first customer service system for a LATAM retail bank (MX / CO / AR), buil
 | `src/scenarios/` | ES/PT scenario generator: Silver anchors, intent dataset and end-to-end agent scenarios ([README](src/scenarios/README.md)) |
 | `src/classifier/` | ES/PT intake intent classifier: keyword baseline, trained model (v1 text only; v2 text plus keyword features, the default), runtime adapter for the app and the final evaluation ([README](src/classifier/README.md)) |
 | `tests/classifier/` | Classifier tests on toy data, including checks that only the evaluation code reads the final test sets |
-| `src/agent_eval/` | End-to-end exam of the real agent (`app/agent.py` with the served model) on the e2e scenarios: a fresh bank per scenario, scoring of what was written to the bank, reply checks, and an oracle mode that must score 280/280 ([README](src/agent_eval/README.md)) |
+| `src/agent_eval/` | End-to-end exam of the real agent (`app/agent.py` with the served model) on the e2e scenarios: a fresh bank per scenario, scoring of what was written to the bank, reply checks, and an oracle mode that must score 280/280 ([README](src/agent_eval/README.md)); `challenge_outcomes.py` reports a saved run in the problem statement's five outcome measures |
 | `tests/agent_eval/` | Tests of the exam's scoring on hand-made fixtures and on a scripted model |
-| `eval/results/` | Classifier evaluation (`intent_classifier.*`) and agent exam results per split and endpoint (`agent_e2e_<split>_<endpoint>.*`), every number with its 95% interval |
-| `docs/` | Data findings, EDA and workflow selection, test scenarios, Silver, Gold and bank tools, and the evaluation of the classifier and the agent ([06](docs/06_evaluation.md)) |
+| `eval/results/` | Classifier evaluation (`intent_classifier.*`), agent exam results per split and endpoint (`agent_e2e_<split>_<endpoint>.*`) and the challenge's outcome measures (`challenge_outcomes_<split>_<endpoint>.*`), every number with its 95% interval |
+| `docs/` | Data findings, EDA and workflow selection, test scenarios, Silver, Gold and bank tools, the evaluation of the classifier and the agent ([06](docs/06_evaluation.md)), and the architecture and route to operation ([07](docs/07_architecture_and_operations.md)) |
 | `docs/03_test_scenarios.md` | Test scenarios (ES/PT): label provenance, splits and leakage checks, e2e categories, audit results |
 | `docs/04_silver_layer.md` | Silver layer: issue-to-rule mapping, checks, watermark/MERGE semantics, freshness, results |
 | `docs/05_gold_and_bank_tools.md` | Gold layer (tables, privacy, identity hash, checks, results) and the bank tools (identity, tool catalog, access control, confirmation, handoff, errors, audit, test and replay results) |
@@ -35,6 +46,8 @@ An AI-first customer service system for a LATAM retail bank (MX / CO / AR), buil
 | `.env.example` | Local configuration template — copy to `.env`, never commit it |
 
 ## Setup
+
+Python 3.11 (the version of the Databricks App and the Space image; `.python-version` pins it).
 
 ```bash
 git clone https://github.com/nickolasnolte1/factored-hackathon-2026-nico-x2.exe.git
@@ -79,6 +92,7 @@ python -m src.classifier.evaluate                                   # the only c
 # Agent exam (calls the model endpoint; transcripts in the git-ignored data/agent_eval/)
 python -m src.agent_eval.run --oracle --split all                  # scorer check without a model: must be 280/280
 python -m src.agent_eval.run --split dev                           # the real agent on the 140 dev scenarios
+python -m src.agent_eval.challenge_outcomes                        # the five outcome measures of a saved run (no model calls)
 ```
 
 Data lands in Unity Catalog under `workspace.{bronze,silver,gold,ops}`.
