@@ -24,6 +24,22 @@ Against the targets of report 02 (section 9), on the 140 test scenarios:
 
 No test scenario broke a listed tool-level rule (`must_not`): no case without confirmation, no other customer's data, no action on an expired or missing session, no injected instruction followed. Every reply was in the customer's language (140/140).
 
+## Outcomes in the challenge's terms
+
+The problem statement asks for five outcomes, reported separately. They are computed from the final test run's saved results by `python -m src.agent_eval.challenge_outcomes` ([`eval/results/challenge_outcomes_test_databricks-gpt-oss-120b.md`](../eval/results/challenge_outcomes_test_databricks-gpt-oss-120b.md)), with the same bootstrap as the rest of this report. They are offline measurements on generated scenarios, not production results.
+
+| Outcome, as the problem statement defines it | Test split, 140 scenarios (95% interval) |
+|---|---|
+| **Safe automated resolution**: an in-scope case reaches the correct, policy-compliant outcome without a person, over all in-scope cases | 97.5% (77/79) [93.7, 100.0]; automation attempted on 79/79 |
+| **Containment**: the case ends without a transfer (it does not mean the problem was solved) | 79.3% (111/140) [72.1, 85.7] |
+| **Escalation quality**: transfers that were needed, and transfers that were not | 29 must-handoff scenarios: 29 transferred, 28 with the right reason; 0 missed; 0 unnecessary transfers in the other 111 |
+| **Unsafe outcomes**: unauthorized disclosures or actions, or materially incorrect outcomes | 0 of 140 scenarios (95% upper bound 2.1% by the rule of three); 66 of 66 cases linked to the right transaction; 0 case or ticket ids without a tool result in 258 turns |
+| **Operating efficiency**: latency, and cost per attempted case and per successful automated resolution | Turn latency p50 12.4 s, p95 61.5 s (with conversations in flight on a shared endpoint); model cost about US$ 0.0044 per attempted case and US$ 0.0081 per successful automated resolution |
+
+- **Scope.** "In scope" means the expected outcome is a case or an answer (79 scenarios). The other 61 expect a transfer (29), a refusal or abstention (16) or a new sign-in (16). "Unsafe" means a listed tool-level `must_not` rule broken or a grounding violation in a case or ticket. The one transfer with the wrong reason (`e2e-es-0080`, below) is counted under escalation quality, not as unsafe: the customer still reached a person.
+- **Cost assumptions.** Pay-per-token rates for `gpt-oss-120b` of 2.143 DBU per 1M input tokens and 8.571 per 1M output tokens ([Databricks pricing table](https://learn.microsoft.com/en-us/azure/databricks/resources/pricing), retrieved 2026-10-04), and US$ 0.07 per DBU, an assumption that varies by cloud, region and contract. Model tokens only: app hosting, the SQL warehouse, storage and the local classifier are not included. The whole run used 3.73M prompt and 0.10M completion tokens (97% prompt): 8.9 DBU, about US$ 0.62.
+- **Reading the zeros.** No unsafe outcome and no unnecessary transfer were observed in 140 scenarios. That does not establish zero risk: with 140 trials, the rate could still be up to about 2% at 95% confidence.
+
 ## Intent classifier
 
 Details: `eval/results/intent_classifier.md`, code in `src/classifier/`.

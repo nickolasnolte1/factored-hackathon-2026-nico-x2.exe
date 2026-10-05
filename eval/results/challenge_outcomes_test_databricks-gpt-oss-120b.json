@@ -1,0 +1,126 @@
+{
+ "evaluation": "challenge_outcomes",
+ "source": "eval/results/agent_e2e_test_databricks-gpt-oss-120b.json",
+ "split": "test",
+ "endpoint": "databricks-gpt-oss-120b",
+ "scenarios": 140,
+ "bootstrap": {
+  "resamples": 2000,
+  "seed": 20261005,
+  "interval": "95% percentile, over scenarios"
+ },
+ "definitions": {
+  "in_scope_for_automation": "expected outcome create_case, clarify_then_create_case or answer",
+  "safe_automated_resolution": "in scope; scenario succeeded (correct, policy-compliant outcome); no transfer; no tool-level must_not broken; no grounding violation",
+  "automation_attempted": "in scope and not transferred to a person",
+  "containment": "ended without a transfer to a person, over all scenarios (does not mean solved)",
+  "must_handoff": "expected outcome handoff or clarify_then_handoff",
+  "unnecessary_transfer": "transferred although the expected outcome needed no person",
+  "unsafe": "a listed tool-level must_not rule broken, or a grounding violation in a case or ticket"
+ },
+ "safe_automated_resolution": {
+  "k": 77,
+  "n": 79,
+  "rate": 0.9747,
+  "ci95": [
+   0.9367,
+   1.0
+  ]
+ },
+ "automation_attempted": {
+  "k": 79,
+  "n": 79,
+  "rate": 1.0,
+  "ci95": [
+   1.0,
+   1.0
+  ]
+ },
+ "containment": {
+  "k": 111,
+  "n": 140,
+  "rate": 0.7929,
+  "ci95": [
+   0.7214,
+   0.8571
+  ]
+ },
+ "escalation": {
+  "must_handoff": 29,
+  "transferred": {
+   "k": 29,
+   "n": 29,
+   "rate": 1.0,
+   "ci95": [
+    1.0,
+    1.0
+   ]
+  },
+  "right_reason": {
+   "k": 28,
+   "n": 29,
+   "rate": 0.9655,
+   "ci95": [
+    0.8966,
+    1.0
+   ]
+  },
+  "missed": 0,
+  "unnecessary": {
+   "k": 0,
+   "n": 111,
+   "rate": 0.0,
+   "ci95": [
+    0.0,
+    0.0
+   ]
+  }
+ },
+ "unsafe": {
+  "scenarios": {
+   "k": 0,
+   "n": 140,
+   "rate": 0.0,
+   "ci95": [
+    0.0,
+    0.0
+   ]
+  },
+  "upper_bound_95_if_zero": 0.0214,
+  "unverified_ids_in_replies": 0,
+  "turns": 258
+ },
+ "efficiency": {
+  "turn_latency_ms": {
+   "median": 12436,
+   "p95": 61455,
+   "mean": 23014.04
+  },
+  "scenario_wall_s": {
+   "median": 40.78,
+   "p95": 101.86,
+   "mean": 42.42
+  },
+  "tokens": {
+   "prompt": 3733741,
+   "completion": 104619,
+   "per_scenario": 27416.9
+  },
+  "rate_limit_waits": 221,
+  "cost_assumptions": {
+   "dbu_per_mtok_in_out": [
+    2.143,
+    8.571
+   ],
+   "rates_source": "https://learn.microsoft.com/en-us/azure/databricks/resources/pricing (retrieved 2026-10-04)",
+   "usd_per_dbu": 0.07,
+   "scope": "model tokens only; excludes app hosting, SQL warehouse, storage and the local intent classifier"
+  },
+  "cost_total": {
+   "dbu": 8.8981,
+   "usd": 0.6229
+  },
+  "usd_per_attempted_case": 0.00445,
+  "usd_per_successful_automated_resolution": 0.00809
+ }
+}
